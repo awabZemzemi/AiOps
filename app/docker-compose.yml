@@ -1,0 +1,54 @@
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - catalog
+      - checkout
+
+  catalog:
+    build: ./catalog
+    environment:
+      INVENTORY_URL: "${CATALOG_INVENTORY_URL:-http://inventory:8000}"
+    ports:
+      - "8001:8000"
+    depends_on:
+      - inventory
+
+  inventory:
+    build: ./inventory
+    environment:
+      REDIS_HOST: "${REDIS_HOST:-redis}"
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+    ports:
+      - "8002:8000"
+    depends_on:
+      - redis
+
+  orders:
+    build: ./orders
+    environment:
+      INVENTORY_URL: "${ORDERS_INVENTORY_URL:-http://inventory:8000}"
+    ports:
+      - "8003:8000"
+    depends_on:
+      - inventory
+
+  checkout:
+    build: ./checkout
+    environment:
+      ORDERS_URL: "${CHECKOUT_ORDERS_URL:-http://orders:8000}"
+    ports:
+      - "8004:8000"
+    depends_on:
+      - orders
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

@@ -1,0 +1,15 @@
+body {
+  margin: 0;
+  background: #f5f6f8;
+  color: #222;
+  font: 16px/1.5 system-ui, sans-serif;
+}
+main { max-width: 760px; margin: 40px auto; padding: 0 20px; }
+h1 { margin-bottom: 0; }
+#products { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+article { padding: 20px; border: 1px solid #ddd; border-radius: 6px; background: white; }
+h2 { margin-top: 0; font-size: 20px; }
+button { padding: 8px 16px; border: 0; border-radius: 4px; background: #245ac7; color: white; cursor: pointer; font: inherit; }
+button:disabled { background: #777; cursor: default; }
+button:focus-visible { outline: 3px solid #222; outline-offset: 3px; }
+#message { min-height: 24px; }
