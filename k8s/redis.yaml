@@ -1,0 +1,107 @@
+# Single persistent Redis instance; the claim uses the default StorageClass.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: aiops
+  labels:
+    app: redis
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-headless
+  namespace: aiops
+  labels:
+    app: redis-headless
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  type: ClusterIP
+  selector:
+    app: redis
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: aiops
+  labels:
+    app: redis
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  serviceName: redis-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        app.kubernetes.io/part-of: sentinelshop
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.4-alpine
+        imagePullPolicy: IfNotPresent
+        args:
+        - redis-server
+        - --appendonly
+        - 'yes'
+        ports:
+        - name: redis
+          containerPort: 6379
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        startupProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          periodSeconds: 2
+          timeoutSeconds: 2
+          failureThreshold: 30
+        livenessProbe:
+          exec: &id001
+            command:
+            - redis-cli
+            - ping
+          periodSeconds: 10
+          timeoutSeconds: 2
+          failureThreshold: 3
+        readinessProbe:
+          exec: *id001
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 3
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 1Gi

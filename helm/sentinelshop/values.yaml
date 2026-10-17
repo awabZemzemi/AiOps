@@ -1,0 +1,82 @@
+# Kubernetes cluster DNS domain, used by the Nginx runtime resolver.
+clusterDomain: cluster.local
+# Application images must be available on every node. Use immutable tags for updates.
+image:
+  tag: latest
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+components:
+  frontend:
+    replicaCount: 1
+    image:
+      repository: sentinelshop-frontend
+      tag: ''
+    resources:
+      requests:
+        cpu: 50m
+        memory: 32Mi
+      limits:
+        cpu: 250m
+        memory: 64Mi
+  catalog:
+    replicaCount: 1
+    image:
+      repository: sentinelshop-catalog
+      tag: ''
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  inventory:
+    replicaCount: 1
+    image:
+      repository: sentinelshop-inventory
+      tag: ''
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  orders:
+    replicaCount: 1
+    image:
+      repository: sentinelshop-orders
+      tag: ''
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+  checkout:
+    replicaCount: 1
+    image:
+      repository: sentinelshop-checkout
+      tag: ''
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+redis:
+  image:
+    repository: redis
+    tag: 7.4-alpine
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  persistence:
+    size: 1Gi
+    storageClass: null

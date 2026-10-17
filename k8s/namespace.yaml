@@ -1,0 +1,7 @@
+# Keep the application and its lab failures in a dedicated namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aiops
+  labels:
+    app.kubernetes.io/part-of: sentinelshop

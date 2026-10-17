@@ -1,0 +1,94 @@
+# One stateless workload and a stable internal address; start with one replica.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinelshop.name" . }}-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: frontend
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  replicas: {{ .Values.components.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      app: frontend
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  template:
+    metadata:
+      annotations:
+        checksum/app-config: {{ include (print $.Template.BasePath "/app-configmap.yaml") . | sha256sum }}
+        checksum/frontend-config: {{ include (print $.Template.BasePath "/frontend-configmap.yaml") . | sha256sum }}
+      labels:
+        app: frontend
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/part-of: sentinelshop
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: frontend
+        image: "{{ .Values.components.frontend.image.repository }}:{{ default .Values.image.tag .Values.components.frontend.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 80
+        resources:
+          {{- toYaml .Values.components.frontend.resources | nindent 10 }}
+        startupProbe:
+          httpGet:
+            path: /
+            port: http
+          periodSeconds: 2
+          timeoutSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 2
+        command:
+        - /bin/sh
+        - /etc/sentinelshop/start-nginx.sh
+        args:
+        - nginx
+        - -g
+        - daemon off;
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/sentinelshop
+          readOnly: true
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: {{ include "sentinelshop.name" . }}-frontend-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinelshop.name" . }}-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: frontend
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  ports:
+  - name: http
+    port: 80
+    targetPort: http

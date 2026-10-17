@@ -1,0 +1,87 @@
+# One stateless workload and a stable internal address; start with one replica.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: aiops
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        app.kubernetes.io/part-of: sentinelshop
+    spec:
+      containers:
+      - name: frontend
+        image: sentinelshop-frontend:v1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 80
+        resources:
+          requests:
+            cpu: 50m
+            memory: 32Mi
+          limits:
+            cpu: 250m
+            memory: 64Mi
+        startupProbe:
+          httpGet:
+            path: /
+            port: http
+          periodSeconds: 2
+          timeoutSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 2
+        command:
+        - /bin/sh
+        - /etc/sentinelshop/start-nginx.sh
+        args:
+        - nginx
+        - -g
+        - daemon off;
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/sentinelshop
+          readOnly: true
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: frontend-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: aiops
+  labels:
+    app: frontend
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: http

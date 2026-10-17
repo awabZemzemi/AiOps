@@ -1,0 +1,65 @@
+# Render the frontend resolver from Pod DNS at startup, retaining REST proxy routes.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sentinelshop.name" . }}-frontend-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: frontend-config
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+data:
+  default.conf.template: |
+    server {
+        listen 80;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+        resolver __DNS_RESOLVER__ valid=5s ipv6=off;
+
+        location = /api/products {
+            set $backend {{ include "sentinelshop.name" . }}-catalog.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8000;
+            rewrite ^/api/(.*)$ /$1 break;
+            proxy_pass http://$backend;
+            proxy_connect_timeout 3s;
+            proxy_read_timeout 10s;
+            proxy_intercept_errors on;
+            error_page 502 504 =503 /dependency-unavailable;
+        }
+
+        location = /api/orders {
+            set $backend {{ include "sentinelshop.name" . }}-checkout.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8000;
+            rewrite ^/api/(.*)$ /$1 break;
+            proxy_pass http://$backend;
+            proxy_connect_timeout 3s;
+            proxy_read_timeout 10s;
+            proxy_intercept_errors on;
+            error_page 502 504 =503 /dependency-unavailable;
+        }
+
+        location = /dependency-unavailable {
+            internal;
+            default_type application/json;
+            return 503 '{"detail":"API service unavailable"}';
+        }
+
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+  start-nginx.sh: |
+    #!/bin/sh
+    set -eu
+
+    # Kubernetes sets the resolver in each Pod; avoid a cluster-specific DNS IP.
+    resolver=$(awk '/^nameserver[[:space:]]/ { print $2; exit }' /etc/resolv.conf)
+    if [ -z "$resolver" ]; then
+        echo "No DNS resolver found in /etc/resolv.conf" >&2
+        exit 1
+    fi
+    case "$resolver" in
+        *:*) resolver="[$resolver]" ;;
+    esac
+    sed "s|__DNS_RESOLVER__|$resolver|g" \
+        /etc/sentinelshop/default.conf.template > /etc/nginx/conf.d/default.conf
+    exec /docker-entrypoint.sh "$@"

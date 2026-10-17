@@ -1,0 +1,14 @@
+# Service DNS names; each API imports only the keys it needs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: aiops
+  labels:
+    app: app-config
+    app.kubernetes.io/part-of: sentinelshop
+data:
+  INVENTORY_URL: http://inventory:8000
+  ORDERS_URL: http://orders:8000
+  REDIS_HOST: redis
+  REDIS_PORT: '6379'

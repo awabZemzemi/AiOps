@@ -1,0 +1,9 @@
+Open SentinelShop:
+  kubectl -n {{ .Release.Namespace }} port-forward service/{{ include "sentinelshop.name" . }}-frontend 8080:80
+
+Visit http://localhost:8080
+
+Inspect the release:
+  kubectl -n {{ .Release.Namespace }} get pods,services,pvc -l app.kubernetes.io/instance={{ .Release.Name }}
+
+Redis PVCs are retained when the StatefulSet is deleted. See the chart README before cleanup.

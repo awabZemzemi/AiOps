@@ -1,0 +1,90 @@
+# One stateless workload and a stable internal address; start with one replica.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinelshop.name" . }}-inventory
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: inventory
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  replicas: {{ .Values.components.inventory.replicaCount }}
+  selector:
+    matchLabels:
+      app: inventory
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  template:
+    metadata:
+      annotations:
+        checksum/app-config: {{ include (print $.Template.BasePath "/app-configmap.yaml") . | sha256sum }}
+        checksum/frontend-config: {{ include (print $.Template.BasePath "/frontend-configmap.yaml") . | sha256sum }}
+      labels:
+        app: inventory
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/part-of: sentinelshop
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: inventory
+        image: "{{ .Values.components.inventory.image.repository }}:{{ default .Values.image.tag .Values.components.inventory.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8000
+        resources:
+          {{- toYaml .Values.components.inventory.resources | nindent 10 }}
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 2
+          timeoutSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /redis-health
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sentinelshop.name" . }}-app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sentinelshop.name" . }}-app-config
+              key: REDIS_PORT
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinelshop.name" . }}-inventory
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: inventory
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  type: ClusterIP
+  selector:
+    app: inventory
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http

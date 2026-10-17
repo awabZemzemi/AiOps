@@ -1,0 +1,78 @@
+# One stateless workload and a stable internal address; start with one replica.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  namespace: aiops
+  labels:
+    app: orders
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders
+  template:
+    metadata:
+      labels:
+        app: orders
+        app.kubernetes.io/part-of: sentinelshop
+    spec:
+      containers:
+      - name: orders
+        image: sentinelshop-orders:v1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 2
+          timeoutSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 2
+        env:
+        - name: INVENTORY_URL
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: INVENTORY_URL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders
+  namespace: aiops
+  labels:
+    app: orders
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  type: ClusterIP
+  selector:
+    app: orders
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http

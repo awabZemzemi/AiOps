@@ -1,0 +1,15 @@
+# Service DNS names; each API imports only the keys it needs.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sentinelshop.name" . }}-app-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: app-config
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+data:
+  INVENTORY_URL: http://{{ include "sentinelshop.name" . }}-inventory:8000
+  ORDERS_URL: http://{{ include "sentinelshop.name" . }}-orders:8000
+  REDIS_HOST: {{ include "sentinelshop.name" . }}-redis
+  REDIS_PORT: '6379'

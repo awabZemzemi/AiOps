@@ -1,0 +1,83 @@
+# One stateless workload and a stable internal address; start with one replica.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory
+  namespace: aiops
+  labels:
+    app: inventory
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory
+  template:
+    metadata:
+      labels:
+        app: inventory
+        app.kubernetes.io/part-of: sentinelshop
+    spec:
+      containers:
+      - name: inventory
+        image: sentinelshop-inventory:v1
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8000
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 2
+          timeoutSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /redis-health
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+        env:
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: REDIS_PORT
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory
+  namespace: aiops
+  labels:
+    app: inventory
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  type: ClusterIP
+  selector:
+    app: inventory
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http

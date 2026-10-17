@@ -1,0 +1,85 @@
+# One stateless workload and a stable internal address; start with one replica.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sentinelshop.name" . }}-checkout
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: checkout
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  replicas: {{ .Values.components.checkout.replicaCount }}
+  selector:
+    matchLabels:
+      app: checkout
+      app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  template:
+    metadata:
+      annotations:
+        checksum/app-config: {{ include (print $.Template.BasePath "/app-configmap.yaml") . | sha256sum }}
+        checksum/frontend-config: {{ include (print $.Template.BasePath "/frontend-configmap.yaml") . | sha256sum }}
+      labels:
+        app: checkout
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        app.kubernetes.io/part-of: sentinelshop
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: checkout
+        image: "{{ .Values.components.checkout.image.repository }}:{{ default .Values.image.tag .Values.components.checkout.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: 8000
+        resources:
+          {{- toYaml .Values.components.checkout.resources | nindent 10 }}
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 2
+          timeoutSeconds: 1
+          failureThreshold: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 2
+        env:
+        - name: ORDERS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "sentinelshop.name" . }}-app-config
+              key: ORDERS_URL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "sentinelshop.name" . }}-checkout
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: checkout
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  type: ClusterIP
+  selector:
+    app: checkout
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
