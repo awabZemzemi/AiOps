@@ -1,0 +1,19 @@
+
+apiVersion: v1
+kind: Pod
+metadata:
+  name: crash-demo
+  namespace: aiops
+spec:
+  containers:
+    - name: crashing-container
+      image: busybox:1.36
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting application..."
+          sleep 3
+          echo "ERROR: Database connection failed"
+          exit 1
+  restartPolicy: Always

@@ -1,0 +1,29 @@
+# Python environments and generated caches (all services and Helm tests)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local environment and credential files; keep example configuration versioned
+.env
+.env.*
+!.env.example
+!.env.*.example
+.aws/
+.kube/
+
+# Downloaded local Kubernetes tooling
+/kubectl
+/kubectl.sha256
+
+# Packaged Helm charts
+/helm/**/*.tgz
+
+# OS metadata
+.DS_Store
+Thumbs.db
