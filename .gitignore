@@ -27,3 +27,6 @@ htmlcov/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# Local sprint tracking and development notes
+/PROJECT_PROGRESS.md

@@ -1,0 +1,3 @@
+-r requirements.txt
+# TestClient transport; this version is exercised by the API tests.
+httpx==0.28.1
