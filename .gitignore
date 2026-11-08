@@ -9,6 +9,9 @@ __pycache__/
 .coverage.*
 htmlcov/
 
+# Local manual test output
+/logs/
+
 # Local environment and credential files; keep example configuration versioned
 .env
 .env.*

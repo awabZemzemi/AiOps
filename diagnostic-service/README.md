@@ -27,6 +27,7 @@ diagnostic-service/
 ├── tools/
 │   ├── __init__.py
 │   ├── pod_information.py
+│   ├── pod_listing.py
 │   ├── container_logs.py
 │   ├── kubernetes_events.py
 │   └── resource_metrics.py
@@ -151,11 +152,13 @@ Run Python from `diagnostic-service/`:
 
 ```python
 from tools.pod_information import collect_pod_information
+from tools.pod_listing import list_pods
 from tools.container_logs import collect_container_logs
 from tools.kubernetes_events import collect_kubernetes_events
 from tools.resource_metrics import collect_resource_metrics
 
 information = collect_pod_information("aiops", "crash-demo")
+discovery = list_pods("aiops")
 logs = collect_container_logs("aiops", "crash-demo", "crashing-container", tail_lines=50)
 events = collect_kubernetes_events(
     "aiops", "crash-demo", pod_uid=information["pod"]["uid"]
@@ -168,6 +171,7 @@ metrics = collect_resource_metrics(
 | Function | Required parameters | Evidence keys in the returned dictionary |
 | --- | --- | --- |
 | `collect_pod_information` | `namespace`, `pod_name` | `pod`, `containers`, `collection_errors` |
+| `list_pods` | `namespace` | `namespace`, `pods`, `truncated`, `collection_errors` |
 | `collect_container_logs` | `namespace`, `pod_name`, `container_name` | `logs` (keyed by container name), `collection_errors` |
 | `collect_kubernetes_events` | `namespace`, `pod_name` | `events`, `collection_errors` |
 | `collect_resource_metrics` | `namespace`, `pod_name` | `metrics`, `collection_errors` |
@@ -178,6 +182,22 @@ All tools reject empty targets. The log tool also validates the container name a
 
 `collect_pod_evidence()` retains its signature, report format, limits, redaction, and error ordering. It reads Pod information once, calls the log tool for every declared container, then calls events and metrics, merging each tool's evidence and errors. It shares clients rather than opening a new connection session for each tool.
 
+`list_pods()` is independent of that orchestration. It returns Pod name, namespace,
+phase, `ready`, and `restart_count` summaries. Readiness comes from the Pod's
+Ready condition; unknown readiness is `null`. Restarts sum the reported regular,
+init, and ephemeral container counts; missing container statuses yield `null`.
+It requests pages of 50 Pods and follows continuation tokens, returning at most
+100 Pods across five requests. Capped or interrupted listings set `truncated`
+and include a collection error. A failure before any Pods are collected raises
+`PodEvidenceError`; later failures preserve collected evidence. An empty listing
+is successful and does not establish whether the namespace itself exists.
+
+For manual discovery inspection from the repository root, run
+`.venv/bin/python test_pod_listing.py`. Edit its namespace list directly in code.
+It prints structured listings for `aiops` and the normally Pod-free
+`kube-node-lease`, tool metadata, and shared registry/ToolNode registrations.
+No LLM credentials are required, and it does not create resources.
+
 ## Files and API calls
 
 | File | Responsibility |
@@ -185,6 +205,7 @@ All tools reject empty targets. The log tool also validates the container name a
 | `kubernetes_client.py` | Loads current kubeconfig into a local configuration and creates/closes the official clients. Sets connection/read timeouts and disables transport retries. |
 | `diagnostics.py` | Combines independent tool results into the existing report, using one shared client session. |
 | `tools/pod_information.py` | Reads safe Pod metadata and all regular/init/ephemeral container details. |
+| `tools/pod_listing.py` | Lists bounded Pod summaries within a namespace, following pagination. Requires `list` permission on Pods. |
 | `tools/container_logs.py` | Reads bounded current/previous logs for one named container. |
 | `tools/kubernetes_events.py` | Reads bounded events filtered by Pod UID, or name when no UID is supplied. |
 | `tools/resource_metrics.py` | Reads optional current CPU/memory usage and checks a supplied Pod UID. |

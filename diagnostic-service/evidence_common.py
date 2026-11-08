@@ -23,7 +23,12 @@ def collection_error(operation, error, container=None):
 
 
 
+def validate_namespace(namespace):
+    if not isinstance(namespace, str) or not namespace.strip():
+        raise ValueError("namespace must be non-empty")
+
+
 def validate_target(namespace, pod_name):
-    if (not isinstance(namespace, str) or not namespace.strip()
-            or not isinstance(pod_name, str) or not pod_name.strip()):
+    validate_namespace(namespace)
+    if not isinstance(pod_name, str) or not pod_name.strip():
         raise ValueError("namespace and pod_name must be non-empty")
