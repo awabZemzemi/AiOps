@@ -86,7 +86,7 @@ Open Swagger UI at http://127.0.0.1:8005/docs. FastAPI generates one OpenAPI spe
 | --- | --- |
 | `GET /health` | Returns `200` with `{"status":"ok"}`; process health, not cluster readiness. |
 | `GET /api/v1/pods/{namespace}/{pod_name}/evidence` | Returns the existing evidence report. Optional query: `tail_lines` (default 100, range 1–1000, imported from collector constants). |
-| `POST /agent/investigate` | Runs an agent investigation from a JSON `message` and returns `answer`; see the root README. |
+| `POST /agent/investigate` | Returns an investigation ID, status, Markdown answer, and execution metadata; see the [root README](../README.md). |
 
 ```bash
 curl -i http://127.0.0.1:8005/health
@@ -193,11 +193,9 @@ and include a collection error. A failure before any Pods are collected raises
 `PodEvidenceError`; later failures preserve collected evidence. An empty listing
 is successful and does not establish whether the namespace itself exists.
 
-For manual discovery inspection from the repository root, run
-`.venv/bin/python test_pod_listing.py`. Edit its namespace list directly in code.
-It prints structured listings for `aiops` and the normally Pod-free
-`kube-node-lease`, tool metadata, and shared registry/ToolNode registrations.
-No LLM credentials are required, and it does not create resources.
+For discovery through the agent, send `{"message":"List Pods in namespace aiops."}`
+to `POST /agent/investigate`. For direct Python access without model credentials,
+call `list_pods("aiops")` from `diagnostic-service/`, as shown above.
 
 ## Files and API calls
 

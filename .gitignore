@@ -5,12 +5,19 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.tox/
+.nox/
 .coverage
 .coverage.*
 htmlcov/
 
-# Local manual test output
-/logs/
+# Private investigation history, operational logs, and manual output
+logs/
+*.log
+*.log.*
+operations.jsonl*
+messages.jsonl*
 
 # Local environment and credential files; keep example configuration versioned
 .env
@@ -19,6 +26,10 @@ htmlcov/
 !.env.*.example
 .aws/
 .kube/
+*.key
+*.pem
+*.p12
+*.pfx
 
 # Downloaded local Kubernetes tooling
 /kubectl

@@ -1,180 +1,191 @@
-# AiOps
+# AIOps
 
-A local Kubernetes/SRE learning project: SentinelShop provides healthy and intentionally failing workloads, `diagnostic-service` collects read-only Pod evidence, and the Sprint 3 LangGraph agent selects diagnostic tools and explains the evidence.
+A local Kubernetes investigation lab. A FastAPI backend runs a LangGraph agent that gathers read-only evidence and returns a Markdown diagnosis. SentinelShop, a small demo application, provides workloads for practicing outages and troubleshooting.
 
-## Current architecture
+The project combines Pod discovery, container logs, Kubernetes events, and resource metrics in one investigation. It does not perform automated remediation.
 
-```text
-HTTP client → backend.main:app
-                ├── GET /health → process health
-                ├── GET /api/v1/pods/{namespace}/{pod_name}/evidence → evidence collector
-                └── POST /agent/investigate → agent ⇄ ToolNode → diagnostic collectors
+## Quick start
 
-Python/CLI callers → evidence collector → diagnostic collectors → Kubernetes API
-```
+Use Python 3.12, a Groq API key, and a kubeconfig with read access to the workloads you want to inspect. Resource metrics also require a working Kubernetes Metrics API.
 
-The collector returns Pod/container details, bounded current/previous logs, related events, optional resource metrics, and collection errors. Pod discovery is also available independently. The agent uses these same collectors through LangChain adapters. All diagnostic operations are read-only.
-
-| Directory | Purpose |
-| --- | --- |
-| `agent/` | Message state, model configuration and prompt, graph, and LangChain tool adapters. |
-| `backend/` | One FastAPI app serving diagnostics and agent investigations, with graph startup lifecycle. |
-| `app/` | SentinelShop microservices and Docker Compose lab. |
-| `k8s/` | Raw Kubernetes manifests, including the intentional crash-demo Pod. |
-| `helm/sentinelshop/` | Configurable Helm deployment for the shop. |
-| `diagnostic-service/` | Evidence collectors, Pod discovery, diagnostic API router, CLI, tests, and detailed documentation. |
-
-## Sprint 3 agent
-
-`AgentState` contains only `messages`, using LangGraph's `add_messages` reducer. Namespace, exact Pod name, and container name are explicit tool arguments drawn from the conversation. Tool results retain their namespace/Pod identity in the message history, so one investigation can inspect multiple targets without a shared target field.
-
-The graph keeps the existing `START → agent → tools → agent` loop and ends when the model returns no tool calls. The agent node is a small function inside `create_graph`; `ToolNode` executes tools and `tools_condition` handles routing. The same `get_tools()` list binds the model and configures ToolNode.
-
-```python
-from agent.graph import create_graph
-
-graph = create_graph()
-result = graph.invoke(
-    {"messages": [("user", "Check Pod crash-demo in namespace aiops.")]},
-    config={"recursion_limit": 24},
-)
-print(result["messages"][-1].content)
-```
-
-The default `recursion_limit` is 16 graph steps. Both agent and tool executions count toward it; it is not a count of model turns. An unfinished run raises `langgraph.errors.GraphRecursionError`. Callers can catch this exception, as `test_graph.py` does, and streaming callers retain observations already received. The graph does not fabricate cancellation observations or a model answer when the limit is reached.
-
-Set `GROQ_API_KEY` in the repository-root `.env` file or export it in your shell before starting the backend. The backend loads this file at startup, preserving existing environment variables. Manual model/graph scripts still require the key in the environment. `.env.example` lists the required variable. The current profile remains `gpt_oss_120b` on Groq, configured in `agent/factory/model.py`.
-
-The five tools remain `get_pod_info`, `list_pods`, `get_logs`, `get_events`, and `get_metrics`. `ToolRuntime` is used only for the tool-call ID, which is hidden from the model's input schema. Tools return `ToolMessage` observations; they do not write graph state through `Command`. The prompt directs the model to verify Pod existence with tool evidence and obtain container names before reading logs. Verification follows conversation evidence rather than an enforced stored-target gate. Namespace and Pod arguments are still validated by the existing collectors.
-
-The review removed the static `LLMFactory` class in favor of `create_model`, the `AgentNode` class and manual step/cancellation bookkeeping, the ToolNode factory, duplicate edge routing, the separate tool registry module, and the one-prompt directory. `test_tools_node.py` duplicated the ToolNode registration checks in `test_tool_registry.py` and was removed. The unused OpenAI provider dependency and unused `AIOPS_MODEL_PROFILE` example variable were also removed. Existing callers should use `agent.factory.create_model`; `create_graph` no longer takes `max_steps`, and execution limits belong in invocation configuration.
-
-The tool adapter package stays because each diagnostic has its own inputs, collection behavior, and evidence handling. `_common.py` shares error classification and message formatting across all five adapters. Existing collection bounds, safe error messages, identity checks, partial evidence, and metrics limits remain. New Kubernetes diagnostics can add adapters and register them in `get_tools()` without changing state or adding resource-specific nodes.
-
-The diagnostic collectors, Kubernetes/Helm deployments, and SentinelShop runtime code remain unchanged. The diagnostic HTTP module now exposes an `APIRouter` included in `backend.main:app`; there is one FastAPI application and one server. Similar collector/adapter functions serve different interfaces and reuse the same Kubernetes implementation. The service import-path setup is centralized in `agent/tools/__init__.py`; repackaging the collectors would expand this refactor unnecessarily. Repeated logging and HTTP helper code in SentinelShop remains local to independently built container contexts; sharing it would require a separate packaging/build change. Raw manifests and Helm templates provide two documented deployment methods. The original `diagnostic-service/test_connection.py` remains a documented manual experiment and is excluded from automated discovery.
-
-## Run the unified backend
-
-Install the root requirements and set `GROQ_API_KEY` in the repository-root `.env` file (or export it in your shell), then run from the repository root:
+Run from the repository root:
 
 ```bash
+python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env
+```
+
+Set `GROQ_API_KEY` in `.env`, then check your Kubernetes context and start the backend:
+
+```bash
+kubectl config current-context
 .venv/bin/python -m uvicorn backend.main:app \
   --host 127.0.0.1 --port 8005 --no-access-log
 ```
 
-The FastAPI `lifespan` handler loads the repository-root `.env` using a path relative to `backend/main.py`, then builds the graph once at startup and stores it on `app.state.agent`. Exported variables take precedence over `.env` values, and file loading does not depend on the process's working directory. The module exposes `app = FastAPI(lifespan=lifespan)`, and importing it does not build the graph. Each running app reuses its graph across requests; compilation is not repeated by the endpoint. Missing model configuration fails startup. Port 8005 avoids the shop's local ports and serves all endpoints below; a second diagnostic server is not needed.
+The backend loads the root `.env` at startup; exported environment variables take precedence. It builds the agent graph once and reuses it across independent requests. Missing model configuration prevents startup. Kubernetes connections are opened when evidence is requested.
 
-| Method and path | Behavior |
-| --- | --- |
-| `GET /health` | Returns process health without calling the model or Kubernetes. |
-| `GET /api/v1/pods/{namespace}/{pod_name}/evidence` | Returns the existing evidence report; optional `tail_lines` query parameter. |
-| `POST /agent/investigate` | Runs an agent investigation from a JSON `message` and returns its final `answer`. |
+Open [interactive API docs](http://127.0.0.1:8005/docs) or check the process:
 
 ```bash
-curl -X POST http://127.0.0.1:8005/agent/investigate \
-  -H 'Content-Type: application/json' \
-  -d '{"message":"Check Pod crash-demo in namespace aiops."}'
+curl http://127.0.0.1:8005/health
+# {"status":"ok"}
 ```
 
-The JSON response contains `answer`, the final agent message's text. The async endpoint awaits `graph.ainvoke()` with a fresh `{"messages": [HumanMessage(...)]}` state. Requests are independent; include the namespace and resource details in the message. Tool calls and intermediate evidence stay within the graph. The existing default recursion limit of 16 graph steps applies.
+The API uses your server process's Kubernetes identity and has no user authentication. Keep the local server bound to `127.0.0.1`.
 
-Empty or whitespace-only messages, missing messages, and non-string messages return 422. Reaching the graph limit returns 503 with an incomplete-evidence explanation. Other investigation failures return a generic 500 without raw exception details. Interactive API documentation is at http://127.0.0.1:8005/docs.
+## Investigate a workload
 
-## Project structure
+Include the namespace and, when known, the Pod name:
 
-Generated environments, caches, and logs are omitted. Existing application and deployment subtrees are summarized.
+```bash
+curl -sS http://127.0.0.1:8005/agent/investigate \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"Check Pod crash-demo in namespace aiops. Explain the evidence and suggest next steps."}'
+```
+
+If you do not know the Pod name, ask `List Pods in namespace aiops.` first. Requests are independent; the endpoint does not retain a conversation between requests.
+
+An example response:
+
+```json
+{
+  "investigation_id": "e79a859e-3ea9-4b67-a672-924f4608f983",
+  "status": "completed",
+  "answer": "## Diagnosis\n\nThe container is restarting.\n\n**Evidence:** ...",
+  "metadata": {
+    "duration_ms": 1248.73,
+    "tools_used": ["get_pod_info", "get_logs", "get_events"],
+    "tool_call_count": 3
+  }
+}
+```
+
+Responses are validated with Pydantic. The `answer` preserves the final model message's full Markdown, including lists, code blocks, and line breaks. Timing and tool metadata are computed by the backend, independently of what the model writes.
+
+| Field | Meaning |
+| --- | --- |
+| `investigation_id` | A new UUID for each accepted investigation, shared by its response and logs. |
+| `status` | `completed` when a final answer is produced; `failed` on an investigation error. A completed diagnosis can still describe unhealthy workloads or unavailable evidence. |
+| `answer` | The full diagnostic Markdown on success, or a fixed safe error explanation on failure. |
+| `metadata.duration_ms` | Monotonic elapsed time from investigation start through graph execution and answer extraction, before log persistence. |
+| `metadata.tools_used` | Unique tool names from structured LangGraph messages, in first-use order. |
+| `metadata.tool_call_count` | Requested tool calls, including repeated calls and calls that fail. Matching tool results are not counted twice. |
+
+| HTTP status | Behavior |
+| --- | --- |
+| `200` | Returns the completed investigation. |
+| `422` | Rejects missing, blank, or non-string messages before running the graph; uses FastAPI's validation response. |
+| `503` | Graph step limit reached; returns `status: "failed"` and the metadata collected so far. |
+| `500` | Investigation failed; returns `status: "failed"` and a generic explanation without raw exception details. |
+
+The `500` and `503` responses use the same four-field schema as successful investigations. Partial evidence stays available in the local debugging history.
+
+## Evidence without agent reasoning
+
+The same backend exposes the existing collectors directly:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Process health; does not query the model or cluster. |
+| `GET /api/v1/pods/{namespace}/{pod_name}/evidence` | Structured Pod/container details, logs, events, metrics, and collection errors. |
+| `POST /agent/investigate` | Agent-led investigation and diagnostic answer. |
+
+```bash
+curl -sS 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20'
+```
+
+Direct CLI collection does not require model credentials:
+
+```bash
+.venv/bin/python diagnostic-service/main.py crash-demo -n aiops --tail-lines 20
+```
+
+See the [collector documentation](diagnostic-service/README.md) for evidence fields, bounds, error handling, and direct Python usage.
+
+## Local investigation logs
+
+Logging uses Python's built-in `logging` module and stays in `backend/logging_setup.py`, separate from agent reasoning. By default, private logs are written to `logs/backend/`:
+
+| File | Contents |
+| --- | --- |
+| `operations.jsonl` | JSONL start, completion, and error events with investigation ID, status, elapsed time, tool names, and call count. Errors include their type and stack locations. |
+| `messages.jsonl` | JSON records containing the complete serialized LangGraph message history, including tool arguments, tool results, and model metadata, after redaction. |
+
+The endpoint consumes graph state updates so a later model or tool failure does not discard previously emitted messages. Failures and cancellation run the same logging cleanup. If a log write fails, a safe JSON error is emitted to stderr and the investigation response is preserved.
+
+Both streams rotate at **5 MiB per file**, retaining **three backups each**: at most **40 MiB** across the two streams. Oversized records are split into numbered `investigation_log_fragment` JSONL entries; concatenate their `json_fragment` strings in `part` order and parse the resulting JSON to reconstruct the record. Retention applies to fragments too, so histories exceeding the retained capacity cannot be kept in full.
+
+Directories are owner-only (`0700`) and log files are owner-readable/writable (`0600`). Logs and their rotated backups are excluded from Git. Run one server process per log directory; shared-file rotation across multiple workers is not supported.
+
+Before persistence, the logger redacts sensitive structured fields, JSON embedded in message content, common credential formats, authorization headers, URL credentials, email addresses, IPv4 addresses, and values from credential-related environment variables. Raw exception messages and local variables are omitted. Redaction affects stored copies; the diagnostic answer returned by the API is preserved.
+
+Optional settings are documented in `.env.example`:
+
+| Variable | Purpose |
+| --- | --- |
+| `GROQ_API_KEY` | Required model credential. |
+| `AIOPS_LOG_DIR` | Overrides the log directory. Keep custom paths private and outside version control. |
+| `AIOPS_LOG_REDACT_VALUES` | Additional sensitive literals, separated by newlines, to remove from persisted logs. Use this for project-specific identifiers or secrets that generic patterns cannot recognize. |
+
+Application-controlled text can contain sensitive information outside these patterns. Review diagnostic responses before sharing them. No external tracing service is enabled; the investigation ID is passed through LangGraph execution metadata for future tracing integrations.
+
+## Architecture
 
 ```text
-AiOps/
-├── agent/
-│   ├── __init__.py
-│   ├── state.py
-│   ├── factory/
-│   │   ├── __init__.py
-│   │   └── model.py
-│   ├── prompts.py
-│   ├── graph.py
-│   └── tools/
-│       ├── __init__.py          # Exports and tool registration
-│       ├── _common.py          # Safe observations and errors
-│       ├── pod_info.py
-│       ├── pod_listing.py
-│       ├── logs.py
-│       ├── events.py
-│       └── metrics.py
-├── backend/
-│   ├── __init__.py
-│   └── main.py                 # Unified app, graph lifespan, agent endpoint, diagnostic router
-├── diagnostic-service/
-│   ├── api.py                  # Diagnostic APIRouter; no separate FastAPI app
-│   ├── main.py
-│   ├── diagnostics.py
-│   ├── kubernetes_client.py
-│   ├── evidence_common.py
-│   ├── models.py
-│   ├── tools/                  # Five reusable Kubernetes collectors
-│   ├── tests/                  # Existing offline and opt-in cluster tests
-│   ├── test_connection.py
-│   └── README.md
-├── app/
-│   ├── catalog/
-│   ├── checkout/
-│   ├── inventory/
-│   ├── orders/
-│   ├── frontend/
-│   ├── tests/test_lab.py        # Docker integration script
-│   ├── docker-compose.yml
-│   └── README.md
-├── helm/sentinelshop/           # Chart, templates, values, tests, README
-├── k8s/                         # Raw manifests and README
-├── test_agent_workflow.py       # Offline graph/tool regression tests
-├── test_backend.py              # Offline HTTP and async graph integration tests
-├── test_agent.py                # Manual model-only inspection
-├── test_graph.py                # Manual Groq + Kubernetes graph run
-├── test_pod_listing.py          # Manual Kubernetes discovery inspection
-├── test_tool_registry.py        # Local schema, binding, ToolNode checks
-├── requirements.txt
-├── requirements-dev.txt
-├── .env.example
-├── .gitignore
-└── README.md
+HTTP client → FastAPI backend
+                ├── /health
+                ├── /api/v1/pods/.../evidence → diagnostic collectors
+                └── /agent/investigate → LangGraph agent ⇄ ToolNode
+                                               ↓
+                                      diagnostic collectors → Kubernetes API
+
+Investigation lifecycle → private operational logs + redacted message history
 ```
 
-## Validate the agent
+The graph follows `START → agent → tools → agent` until the model returns a final answer. State contains only messages, merged with LangGraph's `add_messages` reducer. The default limit is 16 graph steps, counting both agent and tool steps.
 
-From the repository root:
+The current model profile is `gpt_oss_120b` on Groq, configured in `agent/factory/model.py`. The five tools reuse existing collectors: `list_pods`, `get_pod_info`, `get_logs`, `get_events`, and `get_metrics`. Tool arguments explicitly identify the namespace, Pod, and container; observations retain those identities and partial collection errors.
+
+| Path | Responsibility |
+| --- | --- |
+| `backend/main.py` | Unified FastAPI app, startup lifecycle, validated responses, and investigation orchestration. |
+| `backend/logging_setup.py` | Centralized JSON logging, redaction, permissions, and rotation. |
+| `agent/` | Graph, message state, model factory, prompt, and tool adapters. |
+| `diagnostic-service/` | Reusable collectors, CLI, evidence API router, and collector tests. |
+| `app/` | SentinelShop services and Docker Compose lab. |
+| `k8s/` | Raw Kubernetes manifests and the intentional crash-demo workload. |
+| `helm/sentinelshop/` | Configurable Helm chart and rendering tests. |
+| `test_agent_workflow.py` | Offline graph and tool regression tests. |
+| `test_backend.py` | Offline API, logging, and graph integration tests. |
+
+## Tests
+
+Install development requirements and run the automated suites:
 
 ```bash
-python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-dev.txt
 .venv/bin/python -m unittest test_agent_workflow test_backend -v
 .venv/bin/python -m unittest discover -s diagnostic-service/tests -v
+```
+
+These tests mock model and Kubernetes calls. They check the real graph/tool loop, successful and failed API responses, Markdown preservation, tool metadata, retained failure history, redaction, private permissions, rotation, and logging failures. They do not require a real API key or a running cluster. The live Kubernetes test is skipped unless `RUN_K8S_INTEGRATION=1` is set.
+
+Chart tests additionally require Helm and PyYAML:
+
+```bash
 .venv/bin/python -m unittest discover -s helm/sentinelshop/tests -v
 ```
 
-Agent regression tests use a scripted model and mocked collectors with the real graph, reducer, tools, and ToolNode. They check all five tools, message history, parallel targets, streaming, recursion limits and overrides, model binding/configuration, invalid arguments, identity mismatches, safe errors, partial evidence, and metrics bounds. No model API request or cluster access is needed.
+The Docker integration script in `app/tests/` exercises a running Compose lab and changes its workloads. Follow the [application guide](app/README.md) for that separate test setup. The exploratory `diagnostic-service/test_connection.py` also accesses a real cluster; use the explicit suite commands above rather than running it as a test.
 
-Backend tests check `.env` loading before graph construction, environment-variable precedence, graph construction during lifespan startup, deferred construction before startup, reuse across independent requests, awaited async invocation, response text, request validation, error responses, all three endpoints sharing one app/OpenAPI schema, and the HTTP endpoint running a real async graph/ToolNode cycle with a mocked model and collector. The existing diagnostic API tests target the same unified backend.
+## Run the SentinelShop lab
 
-`test_tool_registry.py` checks schemas and local model binding with `GROQ_API_KEY` set, without an API request. `test_agent.py` makes a model request; `test_graph.py` makes model and read-only Kubernetes requests; `test_pod_listing.py` reads Kubernetes. Run those scripts explicitly when their external services are available. The Docker lab integration script changes stock and restarts containers; see `app/README.md` for its separate setup.
+Choose the deployment guide for your environment:
 
-## Collect evidence through the backend
+- [Docker Compose](app/README.md): run the shop locally and practice dependency outages.
+- [Kubernetes manifests](k8s/README.md): deploy read-only investigation targets and the crash-demo Pod.
+- [Helm chart](helm/sentinelshop/README.md): deploy the shop with configurable images, resources, and replicas.
 
-Start `backend.main:app` with the command above. Diagnostic routes use the existing collectors directly in the same process.
-
-The lab uses context `kind-sentinelops` and namespace `aiops`. The API uses the server process's current kubeconfig identity. Keep it bound to loopback: it has no user authentication. Do not share evidence reports without reviewing their application-controlled text for sensitive content.
-
-```bash
-curl -i http://127.0.0.1:8005/health
-curl -i 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20'
-.venv/bin/python -m unittest discover -s diagnostic-service/tests -v
-```
-
-Swagger UI at http://127.0.0.1:8005/docs shows both diagnostic and agent endpoints. `/health` checks the process; evidence requests return the existing report, including partial collection errors. Invalid inputs return 422; a nonexistent target returns 404. See the [diagnostic-service README](diagnostic-service/README.md) for the full endpoint/error contract, architecture, security decisions, standalone tool examples, and live testing commands. The previous `api:app --app-dir diagnostic-service` entry point is replaced by `backend.main:app`.
-
-## Technical limitations
-
-This is a local development API with no user authentication or in-cluster credential setup. Collection uses sequential reads rather than an atomic snapshot, and per-request Kubernetes timeouts do not impose an overall collection deadline. The service README documents resource bounds, sensitive-text handling, and the known TestClient transport deprecation warning.
-
-Further lab documentation: [application](app/README.md), [Kubernetes](k8s/README.md), [Helm chart](helm/sentinelshop/README.md).
+The documented Kubernetes lab uses context `kind-sentinelops` and namespace `aiops`. Check your current context before deploying or investigating. Metrics may be unavailable without Metrics Server; collectors preserve other evidence and report the collection error.

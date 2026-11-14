@@ -315,6 +315,107 @@ class BackendGraphTests(PrivateLogTests):
         self.assertIsInstance(messages[-1], ToolMessage)
         self.assertEqual(messages[-1].tool_call_id, "list-1")
 
+    def test_real_graph_failure_after_tool_execution_retains_evidence(self):
+        model = Mock()
+        model.invoke.side_effect = [
+            AIMessage(content="", tool_calls=[{
+                "name": "list_pods", "args": {"namespace": "aiops"}, "id": "list-1",
+            }]),
+            RuntimeError("private model failure"),
+        ]
+        evidence = {"namespace": "aiops", "pods": [], "truncated": False, "collection_errors": []}
+        with patch("backend.main.load_dotenv"), \
+             patch("agent.graph.create_model", return_value=model), \
+             patch("agent.tools.pod_listing.collect_pods", return_value=evidence):
+            with TestClient(app) as client:
+                response = client.post("/agent/investigate", json={"message": "List Pods in namespace aiops."})
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json()["metadata"]["tool_call_count"], 1)
+        history = self.entries("messages")[0]["messages"]
+        self.assertEqual([message["type"] for message in history], ["human", "ai", "tool"])
+        self.assertEqual(json.loads(history[-1]["data"]["content"])["evidence"]["pods"], [])
+        self.assertNotIn("private model failure", (self.log_directory / "operations.jsonl").read_text())
+
+
+class LoggingTests(PrivateLogTests):
+    def configure(self, **kwargs):
+        loggers = configure_logging(self.log_directory, **kwargs)
+        for logger in loggers:
+            self.addCleanup(self.close_logger, logger)
+        return loggers
+
+    @staticmethod
+    def close_logger(logger):
+        for handler in logger.handlers[:]:
+            logger.removeHandler(handler)
+            handler.close()
+
+    def test_rotation_permissions_and_bounded_storage(self):
+        operations, history = self.configure(max_bytes=1024, backup_count=2)
+        for index in range(30):
+            for logger in (operations, history):
+                log_event(logger, "test_event", investigation_id=str(index), payload="diagnostic " * 25)
+        files = list(self.log_directory.iterdir())
+        self.assertEqual(len(files), 6)
+        self.assertEqual(stat.S_IMODE(self.log_directory.stat().st_mode), 0o700)
+        for path in files:
+            self.assertLessEqual(path.stat().st_size, 1024)
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            for line in path.read_text().splitlines():
+                json.loads(line)
+        self.assertEqual(self.entries("operations")[-1]["investigation_id"], "29")
+
+    def test_oversized_history_is_reconstructable_and_files_remain_bounded(self):
+        _, history = self.configure(max_bytes=2048, backup_count=10)
+        answer = "## Diagnosis\n" + "Kubernetes \"failure\" ☁\\\n" * 100
+        log_event(history, "investigation_messages", investigation_id="example-id",
+                  messages=[{"type": "ai", "data": {"content": answer}}])
+        fragments = []
+        for path in self.log_directory.glob("messages.jsonl*"):
+            self.assertLessEqual(path.stat().st_size, 2048)
+            fragments.extend(json.loads(line) for line in path.read_text().splitlines())
+        self.assertTrue(all(item["event"] == "investigation_log_fragment" for item in fragments))
+        self.assertEqual(len(fragments), fragments[0]["parts"])
+        restored = json.loads("".join(item["json_fragment"] for item in sorted(fragments, key=lambda item: item["part"])))
+        self.assertEqual(restored["messages"][0]["data"]["content"], answer)
+
+    def test_reconfiguration_does_not_duplicate_handlers_or_events(self):
+        self.configure()
+        operations, _ = self.configure()
+        self.assertEqual(len(operations.handlers), 1)
+        log_event(operations, "single_event")
+        self.assertEqual(len(self.entries("operations")), 1)
+        self.assertFalse(operations.propagate)
+
+    def test_known_secrets_and_additional_literals_are_redacted(self):
+        with patch.dict(os.environ, {
+            "EXAMPLE_API_KEY": "opaque-environment-value",
+            "AIOPS_LOG_REDACT_VALUES": "private-project-name\nprivate-account-number",
+        }):
+            operations, _ = self.configure()
+        log_event(operations, "test_event", message="opaque-environment-value private-project-name private-account-number")
+        saved = (self.log_directory / "operations.jsonl").read_text()
+        for value in ("opaque-environment-value", "private-project-name", "private-account-number"):
+            self.assertNotIn(value, saved)
+
+    def test_redaction_handles_structured_and_free_text_secrets(self):
+        original = {
+            "nested": {"apiKey": "api-value", "credentials": {"value": "credential-value"}},
+            "environment": [{"name": "DB_PASSWORD", "value": "env-value"}],
+            "secret": {"kind": "Secret", "data": {"opaque": "base64-value"}},
+            "message": 'Authorization: Bearer bearer-value password="two word secret" '
+                       'https://db-user:db-pass@db.example.com/?token=query-secret '
+                       'alice@example.com 10.20.30.40 '
+                       '-----BEGIN PRIVATE KEY-----\nprivate-key-body\n-----END PRIVATE KEY-----',
+            "json_content": json.dumps({"password": "json-value"}),
+        }
+        output = json.dumps(redact(original))
+        for value in ("api-value", "credential-value", "env-value", "base64-value", "bearer-value",
+                      "two word secret", "db-user", "db-pass", "query-secret", "alice@example.com",
+                      "10.20.30.40", "private-key-body", "json-value"):
+            self.assertNotIn(value, output)
+        self.assertEqual(original["nested"]["apiKey"], "api-value")
+
 
 class BackendEnvironmentTests(PrivateLogTests):
     def test_root_env_is_loaded_before_building_graph(self):
