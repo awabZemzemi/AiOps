@@ -12,7 +12,7 @@ from langgraph.prebuilt import ToolNode
 from rich.console import Console
 from rich.panel import Panel
 
-from agent.model_factory import LLMFactory
+from agent.factory import create_model
 from agent.tools import get_tools
 
 
@@ -32,12 +32,12 @@ def main() -> None:
         console.print_json(json.dumps(registered.tool_call_schema.model_json_schema()))
     console.print("PASS: exactly the five expected LangChain tools are registered.")
 
-    # Supply the exact same list to the prebuilt executor and the existing factory.
+    # Supply the exact same list to the prebuilt executor and model.
     tool_node = ToolNode(tools)
     assert set(tool_node.tools_by_name) == expected
     console.print("PASS: prebuilt ToolNode registers the same five tools.")
 
-    pipeline = LLMFactory.create(profile, tools=tools)
+    pipeline = create_model(profile, tools=tools)
     definitions = pipeline.last.kwargs["tools"]
     bound_names = [definition["function"]["name"] for definition in definitions]
     assert len(bound_names) == 5 and set(bound_names) == expected

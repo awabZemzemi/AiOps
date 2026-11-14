@@ -1,4 +1,3 @@
-
 """Manual inspection: python test_agent.py.
 
 Edit the profile and state below. Requires GROQ_API_KEY in the environment.
@@ -14,8 +13,7 @@ from rich.table import Table
 
 from langchain_core.messages import HumanMessage
 
-from agent.model_factory import LLMFactory
-from agent.nodes import AgentNode
+from agent.factory import create_model
 from agent.state import AgentState
 from agent.tools import get_tools
 
@@ -30,15 +28,12 @@ def main() -> None:
     state: AgentState = {
         "messages": [
             HumanMessage(
-                content="Can you check whether Pod crash is running?"
+                content="Can you check whether Pod crash is running in namespace aiops?"
             )
         ],
-        "namespace": "aiops",
-        "target_pod": None,
-        "steps_count": 0,
     }
 
-    console.rule("[bold cyan]AiOps — Agent Node Test")
+    console.rule("[bold cyan]AiOps — Agent Model Test")
 
     # Input
     info = Table(show_header=False, box=None, padding=(0, 2))
@@ -46,9 +41,6 @@ def main() -> None:
     info.add_column("Value", style="white")
 
     info.add_row("Model profile", profile)
-    info.add_row("Namespace", state["namespace"])
-    info.add_row("Target Pod", str(state["target_pod"]))
-    info.add_row("Steps", str(state["steps_count"]))
     info.add_row("User request", state["messages"][0].content)
 
     console.print(Panel(info, title="Initial State", border_style="blue"))
@@ -61,13 +53,10 @@ def main() -> None:
         console.print_json(json.dumps(registered_tool.tool_call_schema.model_json_schema()))
 
     # Execute
-    llm = LLMFactory.create(profile, tools=tools)
-    agent_node = AgentNode(llm)
+    llm = create_model(profile, tools=tools)
 
-    with console.status("[cyan]Invoking Agent Node..."):
-        updates = agent_node(state)
-
-    response = updates["messages"][0]
+    with console.status("[cyan]Invoking Agent Model..."):
+        response = llm.invoke(state)
 
     # LLM response
     console.print(
@@ -96,15 +85,6 @@ def main() -> None:
                 border_style="yellow",
             )
         )
-
-    # State updates
-    console.print(
-        Panel(
-            Pretty(updates),
-            title="Returned State Updates",
-            border_style="magenta",
-        )
-    )
 
     console.rule("[bold green]Execution Complete")
 

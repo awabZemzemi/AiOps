@@ -1,8 +1,8 @@
 kubernetes==37.0.1
 fastapi>=0.115,<1.0
 uvicorn>=0.30,<1.0
-langgraph 
-langchain 
-langchain-openai
+python-dotenv>=1.0,<2.0
+langgraph
+langchain
 langchain-groq
 rich

@@ -1,29 +1,29 @@
 # Kubernetes diagnostic evidence collector
 
-Read-only evidence for one Pod, using the official Kubernetes Python client. Reusable tools and a local FastAPI interface expose structured observations. This service does not classify failures, diagnose causes, implement AI agents, or perform remediation.
+Read-only evidence for one Pod, using the official Kubernetes Python client. Reusable tools and a diagnostic router in the unified FastAPI backend expose structured observations. The collector itself does not classify failures, diagnose causes, implement AI agents, or perform remediation.
 
 The existing `test_connection.py` experiment is unchanged. Its Pod/status/log API approach is reused in small functions, without its alert/classification logic. Run the tests below rather than executing the experiment as a test suite: that file connects to the cluster at import time.
 
 ## Architecture and project structure
 
 ```text
-HTTP client → Uvicorn (127.0.0.1) → api.py → diagnostics.py
-                                             ↓
-                    tools/ → official Kubernetes client → Kubernetes API
+HTTP client → backend.main:app → api.router → diagnostics.py
+                                                 ↓
+                        tools/ → official Kubernetes client → Kubernetes API
+
+The same backend also serves POST /agent/investigate.
 ```
 
 The synchronous FastAPI routes validate inputs and translate errors. The collector orchestrates the four independent tools; it does not depend on FastAPI. Each request uses the current kubeconfig, and Kubernetes operations remain read-only. Synchronous routes run in FastAPI's worker thread pool because the collector blocks on network I/O.
 
 ```text
 diagnostic-service/
-├── api.py                     # HTTP routes, safe errors, application logging
+├── api.py                     # APIRouter, safe errors, application logging
 ├── main.py                    # Command-line collector
 ├── diagnostics.py             # Evidence orchestration
 ├── kubernetes_client.py        # Kubeconfig and client lifecycle
 ├── evidence_common.py         # Validation and safe errors
 ├── models.py                  # JSON conversion and sensitive-field omission
-├── requirements.txt           # Runtime dependencies
-├── requirements-dev.txt       # Runtime + TestClient transport
 ├── tools/
 │   ├── __init__.py
 │   ├── pod_information.py
@@ -40,21 +40,21 @@ diagnostic-service/
 From the repository root, create a virtual environment if you do not already have one:
 
 ```bash
-python3 -m venv diagnostic-service/.venv
-diagnostic-service/.venv/bin/python -m pip install -r diagnostic-service/requirements.txt
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
 kubectl config current-context
 ```
 
 The collector uses the existing kubeconfig (`KUBECONFIG` is respected) and its current context, just like the experiment. For this lab the context should be `kind-sentinelops`. If necessary, select it explicitly with `kubectl config use-context kind-sentinelops` before running the collector.
 
 ```bash
-diagnostic-service/.venv/bin/python diagnostic-service/main.py crash-demo -n aiops
+.venv/bin/python diagnostic-service/main.py crash-demo -n aiops
 ```
 
 Save the report or adjust log history:
 
 ```bash
-diagnostic-service/.venv/bin/python diagnostic-service/main.py crash-demo \
+.venv/bin/python diagnostic-service/main.py crash-demo \
   -n aiops --tail-lines 50 > /tmp/crash-demo-evidence.json
 ```
 
@@ -70,27 +70,28 @@ report = collect_pod_evidence("aiops", "crash-demo")
 
 ## Run FastAPI locally
 
-From the repository root, after installing `requirements.txt`:
+From the repository root, after installing `requirements.txt`, set `GROQ_API_KEY` in the root `.env` file or export it. The unified backend initializes the agent graph at startup; the standalone collector and CLI still need no model credentials.
 
 ```bash
-diagnostic-service/.venv/bin/python -m uvicorn api:app \
-  --app-dir diagnostic-service --host 127.0.0.1 --port 8000 \
+.venv/bin/python -m uvicorn backend.main:app \
+  --host 127.0.0.1 --port 8005 \
   --log-level info --no-access-log
 ```
 
-`api:app` imports the `app` object from `api.py`. Keep the explicit loopback host; this API has no user authentication and uses the server process's Kubernetes identity. `--no-access-log` avoids recording arbitrary URL query strings; application logs provide safe evidence-request summaries instead. No kubeconfig is loaded at API import/startup or by `/health`.
+`backend.main:app` is the single FastAPI application. It includes the `APIRouter` from `api.py` and the agent endpoint; no second server or HTTP forwarding is needed. The old `api:app --app-dir diagnostic-service` command is replaced by this entry point. Keep the explicit loopback host; this API has no user authentication and uses the server process's Kubernetes identity. `--no-access-log` avoids recording arbitrary URL query strings; application logs provide safe evidence-request summaries instead. No kubeconfig is loaded at API import/startup or by `/health`.
 
-Open Swagger UI at http://127.0.0.1:8000/docs. FastAPI generates the OpenAPI specification at `/openapi.json` from the route declarations and validation annotations. There are only two application endpoints; documentation routes are provided by FastAPI.
+Open Swagger UI at http://127.0.0.1:8005/docs. FastAPI generates one OpenAPI specification at `/openapi.json` covering all three application endpoints; documentation routes are provided by FastAPI.
 
 | Method and path | Behavior |
 | --- | --- |
 | `GET /health` | Returns `200` with `{"status":"ok"}`; process health, not cluster readiness. |
 | `GET /api/v1/pods/{namespace}/{pod_name}/evidence` | Returns the existing evidence report. Optional query: `tail_lines` (default 100, range 1–1000, imported from collector constants). |
+| `POST /agent/investigate` | Runs an agent investigation from a JSON `message` and returns `answer`; see the root README. |
 
 ```bash
-curl -i http://127.0.0.1:8000/health
-curl -i 'http://127.0.0.1:8000/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20'
-curl -i 'http://127.0.0.1:8000/api/v1/pods/aiops/crash-demo/evidence?tail_lines=0'
+curl -i http://127.0.0.1:8005/health
+curl -i 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20'
+curl -i 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=0'
 ```
 
 The last request returns `422` without calling Kubernetes. Namespace and Pod path parameters also validate Kubernetes DNS naming syntax and lengths. These GET endpoints do not accept a request body.
@@ -212,7 +213,7 @@ No LLM credentials are required, and it does not create resources.
 | `evidence_common.py` | Shared target validation, `PodEvidenceError`, and safe API error formatting. |
 | `models.py` | Defines the report's top-level shape and explicitly selects safe fields from Kubernetes models. Converts timestamps to JSON strings. |
 | `main.py` | Argparse collector CLI with JSON stdout and safe nonzero errors. |
-| `api.py` | Two synchronous HTTP routes, validation, safe status mapping, and logging. |
+| `api.py` | APIRouter with two synchronous diagnostic routes, validation, safe status mapping, and logging. Included in the unified backend. |
 | `tests/` | Offline mocked tests and an opt-in live integration test. |
 
 The collector performs only these Kubernetes reads:
@@ -260,21 +261,21 @@ The report always contains these sections:
 Install the development requirements (includes runtime dependencies and HTTPX, which `TestClient` needs):
 
 ```bash
-diagnostic-service/.venv/bin/python -m pip install -r diagnostic-service/requirements-dev.txt
+.venv/bin/python -m pip install -r requirements-dev.txt
 ```
 
 Offline tests use `unittest` and mocked official client models; they do not require cluster access:
 
 ```bash
-diagnostic-service/.venv/bin/python -m unittest discover -s diagnostic-service/tests -v
+.venv/bin/python -m unittest discover -s diagnostic-service/tests -v
 ```
 
 They cover healthy Pods, CrashLoopBackOff, previous OOMKilled termination, missing previous logs, unavailable metrics, multiple container types, missing/inaccessible Pods, partial API/network failures, bounds, UID event filtering, sensitive-field omission, client configuration, and CLI behavior. Additional independent-tool tests check standalone calls, silence, JSON serialization, local partial errors, default client lifecycle, input validation, and UID matching.
 
-API tests use FastAPI's in-process `TestClient` and patch `api.collect_pod_evidence`; they cover success/report preservation, invalid namespace/Pod/log limits, 404, 403, other upstream statuses, unavailable metrics, safe unexpected errors, worker-thread execution, and generated docs. Logging tests check levels and ensure report/exception contents are excluded. One checks `raise_server_exceptions=True` so unexpected errors cannot escape into the server.
+API tests use the unified backend's in-process `TestClient` and patch `api.collect_pod_evidence`; they cover success/report preservation, invalid namespace/Pod/log limits, 404, 403, other upstream statuses, unavailable metrics, safe unexpected errors, worker-thread execution, and shared generated docs. Graph creation and `.env` loading are mocked in these diagnostic route tests, so no model credentials are needed. Logging tests check levels and ensure report/exception contents are excluded. One checks `raise_server_exceptions=True` so unexpected errors cannot escape into the server.
 
 ```bash
-diagnostic-service/.venv/bin/python -m unittest discover -s diagnostic-service/tests -p test_api.py -v
+.venv/bin/python -m unittest discover -s diagnostic-service/tests -p test_api.py -v
 ```
 
 Starlette 1.9.0 emits a deprecation warning for the HTTPX 0.28.1 TestClient transport declared in the development requirements. This is a known dependency compatibility warning, not an application response error.
@@ -282,7 +283,7 @@ Starlette 1.9.0 emits a deprecation warning for the HTTPX 0.28.1 TestClient tran
 If `aiops/crash-demo` exists in the current context, enable the read-only integration test:
 
 ```bash
-RUN_K8S_INTEGRATION=1 diagnostic-service/.venv/bin/python \
+RUN_K8S_INTEGRATION=1 .venv/bin/python \
   -m unittest discover -s diagnostic-service/tests -v
 ```
 
@@ -292,7 +293,7 @@ The test never creates a Pod or changes a workload. It verifies that the report 
 
 The report is a sequence of reads, not an atomic snapshot. A Pod can restart or be recreated between reads; logs and metrics may refer to a later instant. Events and previous logs are subject to Kubernetes retention, and metrics are current samples rather than history. The collector intentionally does not walk owner workloads, inspect Services/nodes, or fetch external configuration.
 
-The API has no user authentication, report persistence, total collection deadline, or application-level concurrency/rate controls. Runtime dependency ranges are not a complete dependency lock. The response uses a generic dictionary schema rather than a detailed response model. Thread pools are finite, and a timed-out caller does not automatically cancel blocking collection. No AI investigation, diagnostic rules, or remediation is implemented.
+The API has no user authentication, report persistence, total collection deadline, or application-level concurrency/rate controls. Runtime dependency ranges are not a complete dependency lock. The evidence response uses a generic dictionary schema rather than a detailed response model. Thread pools are finite, and a timed-out caller does not automatically cancel blocking collection. The collector has no diagnostic rules or remediation; AI investigation is provided separately by the agent endpoint in the same backend.
 
 ## Live HTTP verification
 
@@ -301,8 +302,8 @@ Start the local server as described above, select an existing healthy Pod, and r
 ```bash
 kubectl -n aiops get pods
 healthy_pod=$(kubectl -n aiops get pods -l app=catalog -o jsonpath='{.items[0].metadata.name}')
-curl -fsS "http://127.0.0.1:8000/api/v1/pods/aiops/$healthy_pod/evidence?tail_lines=20"
-curl -fsS 'http://127.0.0.1:8000/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20'
+curl -fsS "http://127.0.0.1:8005/api/v1/pods/aiops/$healthy_pod/evidence?tail_lines=20"
+curl -fsS 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20'
 ```
 
 Check the report's `target`, `pod`, `containers`, `logs`, `events`, `metrics`, and `collection_errors`. Healthy-container readiness, crash state, restart counts, event counts, and metrics availability depend on the current cluster state; do not expect fixed values. Optional metrics failure should preserve the other sections and HTTP 200. A missing target should return a safe 404.

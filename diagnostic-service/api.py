@@ -1,13 +1,13 @@
-"""Local HTTP interface to the existing read-only evidence collector."""
+"""Diagnostic routes included in the unified backend application."""
 import logging
 from time import perf_counter
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query
 
 from diagnostics import DEFAULT_LOG_LINES, MAX_LOG_LINES, PodEvidenceError, collect_pod_evidence
 
-app = FastAPI(title="AiOps Diagnostic Service", version="0.1.0", debug=False)
+router = APIRouter()
 # Reuse Uvicorn's configured handler/level without changing global logging configuration.
 logger = logging.getLogger("uvicorn.error.aiops")
 
@@ -23,13 +23,13 @@ PodName = Annotated[str, Path(
 )]
 
 
-@app.get("/health")
+@router.get("/health")
 def health() -> dict:
     """Process health only; does not contact Kubernetes."""
     return {"status": "ok"}
 
 
-@app.get("/api/v1/pods/{namespace}/{pod_name}/evidence", responses={
+@router.get("/api/v1/pods/{namespace}/{pod_name}/evidence", responses={
     403: {"description": "Kubernetes access to the target is forbidden"},
     404: {"description": "Target Pod does not exist"},
     429: {"description": "Kubernetes API rate limit exceeded"},

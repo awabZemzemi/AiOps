@@ -3,8 +3,7 @@
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import ToolMessage
 
-from ..state import AgentState
-from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, verified_target
+from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message
 from models import MAX_TEXT_CHARS, text
 from tools.resource_metrics import collect_resource_metrics
 
@@ -12,24 +11,20 @@ MAX_METRIC_CONTAINERS = 100
 
 
 @tool
-def get_metrics(runtime: ToolRuntime[None, AgentState]) -> ToolMessage:
-    """Read current per-container CPU and memory usage for the verified target Pod.
+def get_metrics(namespace: str, pod_name: str, runtime: ToolRuntime) -> ToolMessage:
+    """Read current per-container CPU and memory usage for the supplied Pod.
 
     Use to investigate resource usage after get_pod_info verifies a target.
-    Namespace and Pod name come only from application state. Returns Kubernetes
+    Supply a namespace and exact Pod name. Returns Kubernetes
     quantity strings, sample timestamp, and window, bounded to 100 containers.
     Reports unavailable Metrics Server, missing samples, permissions, and other
-    errors without inventing measurements. This is read-only and does not change
-    the target or collect historical usage.
+    errors without inventing measurements. This is read-only and does not
+    collect historical usage.
     """
-    target = verified_target(runtime, "get_metrics")
-    if isinstance(target, ToolMessage):
-        return target
-    namespace, pod_name = target
     try:
         evidence = collect_resource_metrics(namespace, pod_name)
     except COLLECTOR_ERRORS as error:
-        return collector_failure(runtime, "get_metrics", error)
+        return collector_failure(runtime, "get_metrics", namespace, error, pod_name=pod_name)
 
     metrics = evidence["metrics"]
     if metrics is not None:
@@ -52,4 +47,5 @@ def get_metrics(runtime: ToolRuntime[None, AgentState]) -> ToolMessage:
                 "operation": "metrics", "status": None, "error_type": "CollectionLimit",
                 "message": f"Metrics observation limited to {MAX_METRIC_CONTAINERS} containers and {MAX_TEXT_CHARS} characters per field.",
             })
-    return evidence_message(runtime, "get_metrics", evidence, has_evidence=metrics is not None)
+    return evidence_message(runtime, "get_metrics", namespace, pod_name, evidence,
+                            has_evidence=metrics is not None)

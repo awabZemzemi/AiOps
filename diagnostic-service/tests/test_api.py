@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from kubernetes.client.exceptions import ApiException
 
 import api
+from backend.main import app
 from diagnostics import DEFAULT_LOG_LINES, MAX_LOG_LINES, PodEvidenceError
 
 REPORT = {
@@ -28,8 +29,9 @@ URL = "/api/v1/pods/aiops/crash-demo/evidence"
 class ApiTests(unittest.TestCase):
     def setUp(self):
         # Production-style error responses, rather than re-raising server exceptions in tests.
-        self.client = TestClient(api.app, raise_server_exceptions=False)
-        self.addCleanup(self.client.close)
+        self.enterContext(patch("backend.main.load_dotenv"))
+        self.enterContext(patch("backend.main.create_graph"))
+        self.client = self.enterContext(TestClient(app, raise_server_exceptions=False))
         patcher = patch("api.collect_pod_evidence", return_value=deepcopy(REPORT))
         self.collector = patcher.start()
         self.addCleanup(patcher.stop)
@@ -126,7 +128,9 @@ class ApiTests(unittest.TestCase):
     def test_swagger_and_openapi_describe_the_contract(self):
         self.assertEqual(self.client.get("/docs").status_code, 200)
         schema = self.client.get("/openapi.json").json()
-        self.assertEqual(set(schema["paths"]), {"/health", "/api/v1/pods/{namespace}/{pod_name}/evidence"})
+        self.assertEqual(set(schema["paths"]), {
+            "/health", "/api/v1/pods/{namespace}/{pod_name}/evidence", "/agent/investigate",
+        })
         operation = schema["paths"]["/api/v1/pods/{namespace}/{pod_name}/evidence"]["get"]
         self.assertNotIn("requestBody", operation)
         query = next(p for p in operation["parameters"] if p["name"] == "tail_lines")
@@ -174,7 +178,7 @@ class ApiTests(unittest.TestCase):
         self.collector.side_effect = RuntimeError("private-token-in-exception")
         # With re-raising enabled, a global Exception handler would leak the
         # original error back to the server. The route must handle it instead.
-        with TestClient(api.app, raise_server_exceptions=True) as client:
+        with TestClient(app, raise_server_exceptions=True) as client:
             with self.assertLogs(api.logger, level="INFO") as captured:
                 response = client.get(URL)
         self.assertEqual(response.status_code, 500)
