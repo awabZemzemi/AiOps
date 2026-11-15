@@ -72,7 +72,7 @@ Redis stays at one replica because replication is not configured. A default Stor
 ```bash
 helm lint ./helm/sentinelshop
 helm template sentinelshop ./helm/sentinelshop -n aiops
-python3 -m unittest discover -s helm/sentinelshop/tests
+uv run --locked python -m unittest discover -s helm/sentinelshop/tests
 kubectl -n aiops get pods,services,pvc \
   -l app.kubernetes.io/instance=sentinelshop
 helm uninstall sentinelshop -n aiops

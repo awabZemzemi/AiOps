@@ -37,24 +37,23 @@ diagnostic-service/
 
 ## Run against kind
 
-From the repository root, create a virtual environment if you do not already have one:
+From the repository root, install [uv](https://docs.astral.sh/uv/getting-started/installation/) and sync the root project's locked environment (Python 3.12.3):
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+uv sync --locked
 kubectl config current-context
 ```
 
 The collector uses the existing kubeconfig (`KUBECONFIG` is respected) and its current context, just like the experiment. For this lab the context should be `kind-sentinelops`. If necessary, select it explicitly with `kubectl config use-context kind-sentinelops` before running the collector.
 
 ```bash
-.venv/bin/python diagnostic-service/main.py crash-demo -n aiops
+uv run --locked python diagnostic-service/main.py crash-demo -n aiops
 ```
 
 Save the report or adjust log history:
 
 ```bash
-.venv/bin/python diagnostic-service/main.py crash-demo \
+uv run --locked python diagnostic-service/main.py crash-demo \
   -n aiops --tail-lines 50 > /tmp/crash-demo-evidence.json
 ```
 
@@ -70,10 +69,10 @@ report = collect_pod_evidence("aiops", "crash-demo")
 
 ## Run FastAPI locally
 
-From the repository root, after installing `requirements.txt`, set `GROQ_API_KEY` in the root `.env` file or export it. The unified backend initializes the agent graph at startup; the standalone collector and CLI still need no model credentials.
+From the repository root, after `uv sync --locked`, set `GROQ_API_KEY` in the root `.env` file or export it. The unified backend initializes the agent graph at startup; the standalone collector and CLI still need no model credentials.
 
 ```bash
-.venv/bin/python -m uvicorn backend.main:app \
+uv run --locked uvicorn backend.main:app \
   --host 127.0.0.1 --port 8005 \
   --log-level info --no-access-log
 ```
@@ -256,16 +255,16 @@ The report always contains these sections:
 
 ## Tests
 
-Install the development requirements (includes runtime dependencies and HTTPX, which `TestClient` needs):
+Sync the root environment with the default `dev` group, including HTTPX for `TestClient`:
 
 ```bash
-.venv/bin/python -m pip install -r requirements-dev.txt
+uv sync --locked
 ```
 
 Offline tests use `unittest` and mocked official client models; they do not require cluster access:
 
 ```bash
-.venv/bin/python -m unittest discover -s diagnostic-service/tests -v
+RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s diagnostic-service/tests -v
 ```
 
 They cover healthy Pods, CrashLoopBackOff, previous OOMKilled termination, missing previous logs, unavailable metrics, multiple container types, missing/inaccessible Pods, partial API/network failures, bounds, UID event filtering, sensitive-field omission, client configuration, and CLI behavior. Additional independent-tool tests check standalone calls, silence, JSON serialization, local partial errors, default client lifecycle, input validation, and UID matching.
@@ -273,15 +272,15 @@ They cover healthy Pods, CrashLoopBackOff, previous OOMKilled termination, missi
 API tests use the unified backend's in-process `TestClient` and patch `api.collect_pod_evidence`; they cover success/report preservation, invalid namespace/Pod/log limits, 404, 403, other upstream statuses, unavailable metrics, safe unexpected errors, worker-thread execution, and shared generated docs. Graph creation and `.env` loading are mocked in these diagnostic route tests, so no model credentials are needed. Logging tests check levels and ensure report/exception contents are excluded. One checks `raise_server_exceptions=True` so unexpected errors cannot escape into the server.
 
 ```bash
-.venv/bin/python -m unittest discover -s diagnostic-service/tests -p test_api.py -v
+uv run --locked python -m unittest discover -s diagnostic-service/tests -p test_api.py -v
 ```
 
-Starlette 1.9.0 emits a deprecation warning for the HTTPX 0.28.1 TestClient transport declared in the development requirements. This is a known dependency compatibility warning, not an application response error.
+The tested dependency versions are recorded in the root `pyproject.toml` and `uv.lock`; use that environment for `TestClient` compatibility.
 
 If `aiops/crash-demo` exists in the current context, enable the read-only integration test:
 
 ```bash
-RUN_K8S_INTEGRATION=1 .venv/bin/python \
+RUN_K8S_INTEGRATION=1 uv run --locked python \
   -m unittest discover -s diagnostic-service/tests -v
 ```
 
@@ -291,7 +290,7 @@ The test never creates a Pod or changes a workload. It verifies that the report 
 
 The report is a sequence of reads, not an atomic snapshot. A Pod can restart or be recreated between reads; logs and metrics may refer to a later instant. Events and previous logs are subject to Kubernetes retention, and metrics are current samples rather than history. The collector intentionally does not walk owner workloads, inspect Services/nodes, or fetch external configuration.
 
-The API has no user authentication, report persistence, total collection deadline, or application-level concurrency/rate controls. Runtime dependency ranges are not a complete dependency lock. The evidence response uses a generic dictionary schema rather than a detailed response model. Thread pools are finite, and a timed-out caller does not automatically cancel blocking collection. The collector has no diagnostic rules or remediation; AI investigation is provided separately by the agent endpoint in the same backend.
+The API has no user authentication, report persistence, total collection deadline, or application-level concurrency/rate controls. Root Python dependencies are locked with uv. The evidence response uses a generic dictionary schema rather than a detailed response model. Thread pools are finite, and a timed-out caller does not automatically cancel blocking collection. The collector has no diagnostic rules or remediation; AI investigation is provided separately by the agent endpoint in the same backend.
 
 ## Live HTTP verification
 

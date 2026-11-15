@@ -6,13 +6,20 @@ The project combines Pod discovery, container logs, Kubernetes events, and resou
 
 ## Quick start
 
-Use Python 3.12, a Groq API key, and a kubeconfig with read access to the workloads you want to inspect. Resource metrics also require a working Kubernetes Metrics API.
+Use **uv 0.13.8** and **CPython 3.12** (pinned to **3.12.3** in `.python-version`), a Groq API key, and a kubeconfig with read access to the workloads you want to inspect. Resource metrics also require a working Kubernetes Metrics API.
+
+Install uv using the [official installation guide](https://docs.astral.sh/uv/getting-started/installation/). For Linux/macOS:
+
+```bash
+curl -LsSf https://astral.sh/uv/0.13.8/install.sh | sh
+```
+
+Open a new shell or add the installer's binary directory to `PATH` before running `uv`.
 
 Run from the repository root:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
+uv sync --locked
 cp .env.example .env
 ```
 
@@ -20,11 +27,17 @@ Set `GROQ_API_KEY` in `.env`, then check your Kubernetes context and start the b
 
 ```bash
 kubectl config current-context
-.venv/bin/python -m uvicorn backend.main:app \
+uv run --locked uvicorn backend.main:app \
   --host 127.0.0.1 --port 8005 --no-access-log
 ```
 
 The backend loads the root `.env` at startup; exported environment variables take precedence. It builds the agent graph once and reuses it across independent requests. Missing model configuration prevents startup. Kubernetes connections are opened when evidence is requested.
+
+`pyproject.toml` is the source of truth for direct dependencies; `uv.lock` records resolved transitive versions and artifact hashes. This is one root application project with `package = false`, so imports and entry points use the existing source tree. `uv sync --locked` creates/manages the ignored `.venv` and includes the `dev` test group; `uv sync --locked --no-dev` installs runtime dependencies only. A stale lock causes `--locked` to fail rather than update versions. Activation is unnecessary with `uv run --locked`.
+
+Migration preserved all 68 tested Linux runtime versions, using the previous requirements pins as temporary resolver constraints. Those constraints were removed after seeding the lock; transitive versions are now maintained only in `uv.lock`. The universal lock also contains platform-specific dependencies that are not installed on Linux. Runtime behavior is verified on Linux x86_64/Python 3.12.3; other platforms require testing. Existing unrelated packages in `.venv` are removed by an exact sync, so use a dedicated project environment.
+
+The redundant root requirements files were removed after their documentation consumers were migrated. SentinelShop's `app/*/requirements.txt` files remain because its independent Docker build contexts consume them; they are not uv workspace projects.
 
 Open [interactive API docs](http://127.0.0.1:8005/docs) or check the process:
 
@@ -99,7 +112,7 @@ curl -sS 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines
 Direct CLI collection does not require model credentials:
 
 ```bash
-.venv/bin/python diagnostic-service/main.py crash-demo -n aiops --tail-lines 20
+uv run --locked python diagnostic-service/main.py crash-demo -n aiops --tail-lines 20
 ```
 
 See the [collector documentation](diagnostic-service/README.md) for evidence fields, bounds, error handling, and direct Python usage.
@@ -162,23 +175,35 @@ The current model profile is `gpt_oss_120b` on Groq, configured in `agent/factor
 
 ## Tests
 
-Install development requirements and run the automated suites:
+Create a development environment and install the locked dependencies:
 
 ```bash
-.venv/bin/python -m pip install -r requirements-dev.txt
-.venv/bin/python -m unittest test_agent_workflow test_backend -v
-.venv/bin/python -m unittest discover -s diagnostic-service/tests -v
+uv sync --locked
+uv lock --check
+uv pip check
+```
+
+Run the offline suites explicitly from the repository root:
+
+```bash
+uv run --locked python -m unittest test_agent_workflow test_backend -v
+RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s diagnostic-service/tests -v
+uv run --locked python -m unittest discover -s helm/sentinelshop/tests -v
 ```
 
 These tests mock model and Kubernetes calls. They check the real graph/tool loop, successful and failed API responses, Markdown preservation, tool metadata, retained failure history, redaction, private permissions, rotation, and logging failures. They do not require a real API key or a running cluster. The live Kubernetes test is skipped unless `RUN_K8S_INTEGRATION=1` is set.
 
-Chart tests additionally require Helm and PyYAML:
-
-```bash
-.venv/bin/python -m unittest discover -s helm/sentinelshop/tests -v
-```
+Chart tests require the external Helm binary (tested with v3.18.4); PyYAML, HTTPX, and Starlette are explicit `dev` dependencies. They also occur in the runtime dependency graph. Tests use the standard library's `unittest`; pytest is not currently required.
 
 The Docker integration script in `app/tests/` exercises a running Compose lab and changes its workloads. Follow the [application guide](app/README.md) for that separate test setup. The exploratory `diagnostic-service/test_connection.py` also accesses a real cluster; use the explicit suite commands above rather than running it as a test.
+
+## Managing dependencies
+
+Add a runtime dependency with `uv add 'package-name==X.Y.Z'`, or a test-only dependency with `uv add --dev 'package-name==X.Y.Z'`, replacing the placeholders with the selected package/version. Use `uv remove package-name` or `uv remove --dev package-name` to remove one.
+
+Direct dependencies are deliberately pinned. To update one, use `uv add 'langgraph==X.Y.Z'` with an intentionally chosen version. For a transitive dependency, use `uv lock --upgrade-package 'package-name==X.Y.Z'` within the existing dependency constraints. Avoid blanket `uv lock --upgrade`; normal locking retains compatible existing versions.
+
+Review changes to both `pyproject.toml` and `uv.lock`, run `uv sync --locked`, `uv pip check`, and all three offline suites, then verify installation in a fresh environment before accepting an update. Do not hand-edit `uv.lock` or freeze a developer environment. Keep the lockfile in Git; credentials and private index authentication belong outside project files. Helm and independent SentinelShop container dependencies remain separately managed.
 
 ## Run the SentinelShop lab
 
