@@ -197,6 +197,16 @@ Chart tests require the external Helm binary (tested with v3.18.4); PyYAML, HTTP
 
 The Docker integration script in `app/tests/` exercises a running Compose lab and changes its workloads. Follow the [application guide](app/README.md) for that separate test setup. The exploratory `diagnostic-service/test_connection.py` also accesses a real cluster; use the explicit suite commands above rather than running it as a test.
 
+## Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pushes to `main` and `develop`, and pull requests targeting `main`. One Ubuntu 24.04 job installs uv 0.13.8, the Python version from `.python-version`, and Helm v3.18.4. It uses the official `astral-sh/setup-uv` action with a dependency cache keyed to `uv.lock`, `pyproject.toml`, and `.python-version`. Every run still executes `uv sync --locked` and checks dependency compatibility; the cache never replaces lockfile validation. Actions are pinned to immutable commits.
+
+The job checks Python syntax, runs the agent, backend, diagnostic, and chart test suites above with verbose output, and executes `helm lint ./helm/sentinelshop` and `helm template sentinelshop ./helm/sentinelshop -n aiops`. Any failed setup, check, or test fails the job. Helm renders locally without contacting Kubernetes.
+
+CI grants only `contents: read`, uses no repository secrets, clears the model API key, sets `KUBECONFIG=/dev/null`, disables tracing, and fixes `RUN_K8S_INTEGRATION=0`. The read-only live Kubernetes test remains explicitly opt-in outside CI; the Docker lab integration and exploratory cluster script are also manual. Normal CI makes no paid model calls, deploys nothing, and modifies no cluster resources.
+
+After committing and pushing the workflow together with `pyproject.toml`, `.python-version`, and `uv.lock`, open **GitHub → Actions → CI** to inspect the run and individual step logs. Pull requests also show the **Offline tests** check. GitHub Actions must be enabled for the repository; fork PRs may require maintainer approval. The workflow has no deployment stage.
+
 ## Managing dependencies
 
 Add a runtime dependency with `uv add 'package-name==X.Y.Z'`, or a test-only dependency with `uv add --dev 'package-name==X.Y.Z'`, replacing the placeholders with the selected package/version. Use `uv remove package-name` or `uv remove --dev package-name` to remove one.

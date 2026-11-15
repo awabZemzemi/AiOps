@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    name: Offline tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RUN_K8S_INTEGRATION: "0"
+      GROQ_API_KEY: ""
+      KUBECONFIG: /dev/null
+      LANGSMITH_TRACING: "false"
+      LANGCHAIN_TRACING_V2: "false"
+      AIOPS_LOG_DIR: /tmp/aiops-ci-logs
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.13.8"
+          enable-cache: true
+          cache-dependency-glob: |
+            uv.lock
+            pyproject.toml
+            .python-version
+
+      - name: Install Python from .python-version
+        run: uv python install
+
+      - name: Install and check locked dependencies
+        run: |
+          uv sync --locked
+          uv pip check
+
+      - name: Set up Helm
+        uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
+        with:
+          version: v3.18.4
+          checksum-policy: required
+
+      - name: Check Python syntax
+        run: uv run --locked python -m compileall -q agent backend diagnostic-service app test_agent_workflow.py test_backend.py
+
+      - name: Test agent and LangGraph workflow
+        run: uv run --locked python -m unittest test_agent_workflow -v
+
+      - name: Test FastAPI backend and investigation logging
+        run: uv run --locked python -m unittest test_backend -v
+
+      - name: Test diagnostic collectors, tools, CLI, and API
+        run: uv run --locked python -m unittest discover -s diagnostic-service/tests -v
+
+      - name: Lint and render Helm chart
+        run: |
+          helm lint ./helm/sentinelshop
+          helm template sentinelshop ./helm/sentinelshop -n aiops > /dev/null
+
+      - name: Test Helm templates
+        run: uv run --locked python -m unittest discover -s helm/sentinelshop/tests -v
