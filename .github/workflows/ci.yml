@@ -53,7 +53,7 @@ jobs:
           checksum-policy: required
 
       - name: Check Python syntax
-        run: uv run --locked python -m compileall -q agent backend migrations diagnostic-service app tests
+        run: uv run --locked python -m compileall -q agent backend migrations diagnostic-service app tests scripts
 
       - name: Test agent and LangGraph workflow
         run: uv run --locked python -m unittest tests.test_agent_workflow -v
@@ -64,13 +64,21 @@ jobs:
       - name: Test authentication and namespace authorization
         run: uv run --locked python -m unittest tests.test_auth -v
 
+      - name: Test Kubernetes credential configuration and RBAC
+        run: uv run --locked python -m unittest tests.test_kubernetes_credentials -v
+
       - name: Test diagnostic collectors, tools, CLI, and API
-        run: uv run --locked python -m unittest discover -s diagnostic-service/tests -v
+        run: uv run --locked python -m unittest discover -s tests/diagnostic_service -v
 
       - name: Lint and render Helm chart
         run: |
-          helm lint ./helm/sentinelshop
-          helm template sentinelshop ./helm/sentinelshop -n aiops > /dev/null
+          helm lint ./deploy/test-lab/helm/sentinelshop
+          helm template sentinelshop-lab ./deploy/test-lab/helm/sentinelshop -n aiops > /dev/null
+          helm lint ./deploy/aiops/helm/aiops
+          helm template aiops ./deploy/aiops/helm/aiops -n aiops-system > /dev/null
 
       - name: Test Helm templates
-        run: uv run --locked python -m unittest discover -s helm/sentinelshop/tests -v
+        run: uv run --locked python -m unittest tests.test_lab_chart -v
+
+      - name: Test AIOps deployment and RBAC templates
+        run: uv run --locked python -m unittest tests.test_aiops_chart -v

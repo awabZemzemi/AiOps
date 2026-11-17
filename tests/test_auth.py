@@ -42,14 +42,14 @@ class AuthTests(unittest.TestCase):
         self.sessions, self.admin, self.headers = prepare_auth(self, ["aiops"])
         self.logs = Path(self.enterContext(TemporaryDirectory(prefix="auth-logs-")))
         self.enterContext(patch.dict(os.environ, {"AIOPS_LOG_DIR": str(self.logs)}))
-        self.enterContext(patch("backend.main.load_dotenv"))
+        self.enterContext(patch("backend.core.lifespan.load_dotenv"))
         self.graph = Mock()
 
         async def stream(state, **kwargs):
             yield {"messages": [*state["messages"], AIMessage(content="Done.")]}
 
         self.graph.astream.side_effect = stream
-        self.enterContext(patch("backend.main.create_graph", return_value=self.graph))
+        self.enterContext(patch("backend.core.lifespan.create_graph", return_value=self.graph))
         self.client = self.enterContext(TestClient(app))
 
     def seed_operator(self, username="operator", namespaces=None):
@@ -429,11 +429,11 @@ class MigrationBootstrapTests(unittest.TestCase):
         self.assertIn("hidden terminal", errors.getvalue())
 
     def test_startup_requires_secret_and_migrations(self):
-        with patch("backend.main.load_dotenv"), patch.dict(os.environ, {"AIOPS_JWT_SECRET": ""}):
+        with patch("backend.core.lifespan.load_dotenv"), patch.dict(os.environ, {"AIOPS_JWT_SECRET": ""}):
             with self.assertRaisesRegex(ValueError, "AIOPS_JWT_SECRET"):
                 with TestClient(app):
                     pass
-        with patch("backend.main.load_dotenv"), patch.dict(os.environ, {"AIOPS_JWT_SECRET": "x" * 48}):
+        with patch("backend.core.lifespan.load_dotenv"), patch.dict(os.environ, {"AIOPS_JWT_SECRET": "x" * 48}):
             with self.assertRaisesRegex(RuntimeError, "alembic upgrade head"):
                 with TestClient(app):
                     pass

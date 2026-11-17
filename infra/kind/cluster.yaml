@@ -1,0 +1,5 @@
+# Optional reproducible local cluster; does not modify an existing cluster.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane

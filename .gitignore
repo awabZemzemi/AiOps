@@ -44,7 +44,7 @@ messages.jsonl*
 /kubectl.sha256
 
 # Packaged Helm charts
-/helm/**/*.tgz
+/deploy/**/helm/**/*.tgz
 
 # OS metadata
 .DS_Store

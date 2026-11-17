@@ -1,0 +1,25 @@
+# Independent of deploy/test-lab/helm/sentinelshop. Install into aiops-system; inspect aiops only.
+image:
+  repository: aiops-backend
+  tag: local
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+# Existing Secret in the release namespace with AIOPS_JWT_SECRET and GROQ_API_KEY.
+existingSecret: aiops-backend-secrets
+serviceAccount:
+  name: aiops-agent
+rbac:
+  create: true
+  targetNamespace: aiops
+service:
+  port: 8005
+persistence:
+  size: 1Gi
+  storageClass: null
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi

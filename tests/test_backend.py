@@ -17,8 +17,10 @@ from backend.auth.schemas import UserPublic
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, messages_to_dict
 from langgraph.errors import GraphRecursionError
 
-from backend.main import InvestigateRequest, InvestigateResponse, app, investigate
-from backend.logging_setup import configure_logging, log_event, redact
+from backend.main import app
+from backend.investigations.routes import investigate
+from backend.investigations.schemas import InvestigateRequest, InvestigateResponse
+from backend.core.logging import configure_logging, log_event, redact
 from starlette.requests import Request
 from diagnostics import PodEvidenceError
 
@@ -47,8 +49,8 @@ class BackendTests(PrivateLogTests):
                 raise self.failure
 
         self.graph.astream.side_effect = stream
-        self.enterContext(patch("backend.main.load_dotenv"))
-        self.factory = self.enterContext(patch("backend.main.create_graph", return_value=self.graph))
+        self.enterContext(patch("backend.core.lifespan.load_dotenv"))
+        self.factory = self.enterContext(patch("backend.core.lifespan.create_graph", return_value=self.graph))
         self.client = self.enterContext(TestClient(app, headers=self.auth_headers))
 
     def test_graph_is_built_at_startup_and_reused(self):
@@ -107,7 +109,7 @@ class BackendTests(PrivateLogTests):
             ToolMessage(content="more logs", name="get_logs", tool_call_id="logs-2"),
             AIMessage(content=answer, response_metadata={"model_name": "scripted-model"}),
         ]}
-        with patch("backend.main.perf_counter", side_effect=[10, 10.125]):
+        with patch("backend.investigations.routes.perf_counter", side_effect=[10, 10.125]):
             response = self.client.post("/agent/investigate", json={"message": "Inspect demo."})
         body = response.json()
         self.assertEqual(body["answer"], answer)
@@ -282,7 +284,7 @@ class BackendTests(PrivateLogTests):
 
 class BackendGraphTests(PrivateLogTests):
     def test_graph_construction_waits_for_lifespan_startup(self):
-        with patch("backend.main.load_dotenv"), patch("backend.main.create_graph") as factory:
+        with patch("backend.core.lifespan.load_dotenv"), patch("backend.core.lifespan.create_graph") as factory:
             client = TestClient(app, headers=self.auth_headers)
             factory.assert_not_called()
             with client:
@@ -290,7 +292,7 @@ class BackendGraphTests(PrivateLogTests):
                 self.assertIs(app.state.agent, factory.return_value)
 
     def test_missing_model_key_fails_startup(self):
-        with patch("backend.main.load_dotenv"), patch.dict(os.environ, {"GROQ_API_KEY": ""}):
+        with patch("backend.core.lifespan.load_dotenv"), patch.dict(os.environ, {"GROQ_API_KEY": ""}):
             with self.assertRaisesRegex(ValueError, "GROQ_API_KEY"):
                 with TestClient(app, headers=self.auth_headers):
                     pass
@@ -304,7 +306,7 @@ class BackendGraphTests(PrivateLogTests):
             AIMessage(content="No Pods found in namespace aiops."),
         ]
         evidence = {"namespace": "aiops", "pods": [], "truncated": False, "collection_errors": []}
-        with patch("backend.main.load_dotenv"), \
+        with patch("backend.core.lifespan.load_dotenv"), \
              patch("agent.graph.create_model", return_value=model), \
              patch("agent.tools.pod_listing.collect_pods", return_value=evidence) as collector:
             with TestClient(app, headers=self.auth_headers) as client:
@@ -328,7 +330,7 @@ class BackendGraphTests(PrivateLogTests):
             RuntimeError("private model failure"),
         ]
         evidence = {"namespace": "aiops", "pods": [], "truncated": False, "collection_errors": []}
-        with patch("backend.main.load_dotenv"), \
+        with patch("backend.core.lifespan.load_dotenv"), \
              patch("agent.graph.create_model", return_value=model), \
              patch("agent.tools.pod_listing.collect_pods", return_value=evidence):
             with TestClient(app, headers=self.auth_headers) as client:
@@ -427,7 +429,7 @@ class BackendEnvironmentTests(PrivateLogTests):
             root = Path(directory)
             (root / ".env").write_text("GROQ_API_KEY=test-only-from-file\n")
             os.environ.pop("GROQ_API_KEY", None)
-            with patch("backend.main.__file__", str(root / "backend" / "main.py")):
+            with patch("backend.core.lifespan.__file__", str(root / "backend" / "core" / "lifespan.py")):
                 with TestClient(app, headers=self.auth_headers):
                     self.assertEqual(os.environ["GROQ_API_KEY"], "test-only-from-file")
                     self.assertTrue(callable(app.state.agent.ainvoke))
@@ -437,7 +439,7 @@ class BackendEnvironmentTests(PrivateLogTests):
              patch.dict(os.environ, {"GROQ_API_KEY": "test-only-exported"}):
             root = Path(directory)
             (root / ".env").write_text("GROQ_API_KEY=test-only-from-file\n")
-            with patch("backend.main.__file__", str(root / "backend" / "main.py")):
+            with patch("backend.core.lifespan.__file__", str(root / "backend" / "core" / "lifespan.py")):
                 with TestClient(app, headers=self.auth_headers):
                     self.assertEqual(os.environ["GROQ_API_KEY"], "test-only-exported")
 

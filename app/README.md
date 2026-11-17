@@ -139,7 +139,7 @@ Likewise, override `CATALOG_INVENTORY_URL` or `ORDERS_INVENTORY_URL` with a bad 
 With the demo running and no other users placing orders:
 
 ```bash
-python3 tests/test_lab.py
+python3 ../tests/test_lab_integration.py
 ```
 
 The test uses only Python's standard library and Docker Compose. It checks API contracts, proxy routing, concurrent stock depletion, outages, misconfiguration, and restart recovery. It temporarily changes stock and stops/recreates containers, then restores stock and normal settings. A Docker-accessible shell is required. Use only against this local demo.

@@ -43,7 +43,7 @@ def collect_pod_evidence(namespace: str, pod_name: str, *, tail_lines: int = DEF
     """Combine tool results into the existing report using one shared client session.
 
     Optional evidence failures are recorded. Failure to read the target raises
-    PodEvidenceError. Inject both clients for offline tests, or use current kubeconfig.
+    PodEvidenceError. Inject both clients for offline tests, or use explicitly configured credentials.
     """
     validate_target(namespace, pod_name)
     validate_tail_lines(tail_lines)

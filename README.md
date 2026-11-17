@@ -4,9 +4,94 @@ A local Kubernetes investigation lab. A FastAPI backend runs a LangGraph agent t
 
 The project combines Pod discovery, container logs, Kubernetes events, and resource metrics in one investigation. It does not perform automated remediation.
 
+## Repository and deployment separation
+
+```text
+agent/                         # Reactive graph, message state, authorized tools
+backend/                       # FastAPI, authentication and application RBAC
+diagnostic-service/            # Read-only evidence collectors and CLI
+app/                           # SentinelShop source, Dockerfiles and Compose lab
+tests/                         # All automated Python tests; manual Compose runner
+deploy/
+  aiops/
+    helm/aiops/                # Backend, Service, PVC, ServiceAccount, Role/Binding
+    manifests/                 # Standalone RBAC for the local Ubuntu workflow
+    README.md                  # Local credentials and safe ownership transition
+  test-lab/
+    helm/sentinelshop/         # SentinelShop, Redis and intentional crash-demo
+    manifests/                 # Alternative raw lab manifests and failure exercises
+    README.md                  # Independent lab installation/removal
+infra/kind/                    # Optional reproducible local cluster configuration
+scripts/                       # Restricted credential generation
+```
+
+### Local development
+
+FastAPI runs on Ubuntu with `AIOPS_KUBERNETES_MODE=kubeconfig` and an explicitly
+selected restricted credential file. Follow the quick start below and
+[local credential setup](deploy/aiops/README.md). No personal kubeconfig fallback
+is allowed. Existing local settings do not need to change for this reorganization.
+
+### Kubernetes deployment
+
+FastAPI runs in `aiops-system` with `AIOPS_KUBERNETES_MODE=incluster`, using its
+dedicated projected ServiceAccount token. Build/load the backend image and create
+the external Secret using the [AIOps chart guide](deploy/aiops/helm/aiops/README.md),
+then install independently of the Test Lab:
+
+```bash
+helm upgrade --install aiops deploy/aiops/helm/aiops \
+  --kube-context kind-sentinelops -n aiops-system --create-namespace --wait --timeout 5m
+helm uninstall aiops -n aiops-system --kube-context kind-sentinelops
+```
+
+The diagnostic target namespace must exist; the Test Lab itself is optional.
+The chart references private credentials and creates no default users. Read the
+[ownership transition plan](deploy/aiops/README.md#safe-rbac-ownership-transition)
+before changing any existing standalone RBAC resources.
+
+### Test Lab
+
+Use [Kind setup](infra/kind/README.md) to create a new cluster only if needed:
+
+```bash
+kind create cluster --name sentinelops --config infra/kind/cluster.yaml
+# After building/loading the lab images using deploy/test-lab/README.md:
+helm upgrade --install sentinelshop-lab deploy/test-lab/helm/sentinelshop \
+  --kube-context kind-sentinelops -n aiops --create-namespace
+helm uninstall sentinelshop-lab -n aiops --kube-context kind-sentinelops
+```
+
+The lab includes `sentinelshop-lab-crash-demo` with intentional repeated crashes;
+use `--set crashDemo.enabled=false` for healthy-only runs. Its chart owns no
+AIOps RBAC and is not an AIOps chart dependency. Uninstall the release, not the
+shared diagnostic target namespace. See the [lab guide](deploy/test-lab/README.md)
+for raw-manifest alternatives and existing failure scenarios.
+
+Validate both charts without contacting the cluster:
+
+```bash
+helm lint deploy/aiops/helm/aiops
+helm lint deploy/test-lab/helm/sentinelshop
+helm template aiops deploy/aiops/helm/aiops -n aiops-system
+helm template sentinelshop-lab deploy/test-lab/helm/sentinelshop -n aiops
+```
+
 ## Quick start
 
-Use **uv 0.13.8** and **CPython 3.12** (pinned to **3.12.3** in `.python-version`), a Groq API key, and a kubeconfig with read access to the workloads you want to inspect. Resource metrics also require a working Kubernetes Metrics API.
+Two independent deployment units are available:
+
+- **Test application:** `app/` contains the SentinelShop Docker services;
+  [`deploy/test-lab/helm/sentinelshop`](deploy/test-lab/helm/sentinelshop/README.md) deploys only those workloads.
+- **AIOps:** [`backend/Dockerfile`](backend/Dockerfile) builds the diagnostic backend;
+  [`deploy/aiops/helm/aiops`](deploy/aiops/helm/aiops/README.md) deploys it with persistent users and its own
+  namespace-scoped diagnostic RBAC. It uses in-cluster ServiceAccount credentials.
+
+The charts have separate releases and lifecycles. See the AIOps chart guide for
+image builds, Kind installation, private configuration, migrations and bootstrap.
+The local Python workflow below remains available independently.
+
+Use **uv 0.13.8** and **CPython 3.12** (pinned to **3.12.3** in `.python-version`), a Groq API key, and the dedicated read-only ServiceAccount kubeconfig described in [Kubernetes RBAC setup](deploy/aiops/README.md). Resource metrics also require a working Kubernetes Metrics API.
 
 Install uv using the [official installation guide](https://docs.astral.sh/uv/getting-started/installation/). For Linux/macOS:
 
@@ -32,7 +117,9 @@ then check your Kubernetes context and start the backend:
 chmod 600 .env
 uv run --locked alembic upgrade head
 uv run --locked python -m backend.auth.bootstrap --username admin --namespace aiops
-kubectl config current-context
+# First apply RBAC and generate private credentials as described in deploy/aiops/README.md.
+export AIOPS_KUBERNETES_MODE=kubeconfig
+export AIOPS_KUBECONFIG_PATH="$HOME/.config/aiops/agent.kubeconfig"
 uv run --locked uvicorn backend.main:app \
   --host 127.0.0.1 --port 8005 --no-access-log
 ```
@@ -53,9 +140,8 @@ curl http://127.0.0.1:8005/health
 ```
 
 The API requires JWT authentication and enforces each user's explicit namespace
-permissions, including inside agent tools. `/health` remains public. Dedicated
-least-privilege Kubernetes credentials are still a deployment blocker: collectors
-use the server process's kubeconfig. Keep local development bound to `127.0.0.1`.
+permissions, including inside agent tools. `/health` remains public. Kubernetes access uses an explicitly configured dedicated read-only ServiceAccount;
+see [setup and token renewal](deploy/aiops/README.md). Keep local development bound to `127.0.0.1`.
 
 ## Investigate a workload
 
@@ -135,7 +221,7 @@ See the [collector documentation](diagnostic-service/README.md) for evidence fie
 
 ## Local investigation logs
 
-Logging uses Python's built-in `logging` module and stays in `backend/logging_setup.py`, separate from agent reasoning. By default, private logs are written to `logs/backend/`:
+Logging uses Python's built-in `logging` module and stays in `backend/core/logging.py`, separate from agent reasoning. By default, private logs are written to `logs/backend/`:
 
 | File | Contents |
 | --- | --- |
@@ -179,15 +265,28 @@ The current model profile is `gpt_oss_120b` on Groq, configured in `agent/factor
 
 | Path | Responsibility |
 | --- | --- |
-| `backend/main.py` | Unified FastAPI app, startup lifecycle, validated responses, and investigation orchestration. |
-| `backend/logging_setup.py` | Centralized JSON logging, redaction, permissions, and rotation. |
+| `backend/main.py` | FastAPI entry point: registers routers and safe error handlers. |
+| `backend/core/` | Application startup/shutdown, HTTP error handling, private JSON logging and redaction. |
+| `backend/auth/` | Persistent identities, JWTs, passwords, access dependencies, account management and Admin bootstrap. |
+| `backend/investigations/` | Investigation route, request/response schemas and tool-execution metadata. |
 | `agent/` | Graph, message state, model factory, prompt, and tool adapters. |
 | `diagnostic-service/` | Reusable collectors, CLI, evidence API router, and collector tests. |
 | `app/` | SentinelShop services and Docker Compose lab. |
-| `k8s/` | Raw Kubernetes manifests and the intentional crash-demo workload. |
-| `helm/sentinelshop/` | Configurable Helm chart and rendering tests. |
+| `deploy/test-lab/` | Independent Test Lab Helm chart, raw manifests and failure scenarios. |
+| `deploy/aiops/` | Independent AIOps Helm chart and standalone local-development RBAC. |
+| `infra/kind/` | Optional reproducible Kind cluster configuration. |
+| `deploy/test-lab/helm/sentinelshop/` | Configurable Helm chart and rendering tests. |
 | `tests/test_agent_workflow.py` | Offline graph and tool regression tests. |
 | `tests/test_backend.py` | Offline API, logging, and graph integration tests. |
+| `tests/test_auth.py` | Offline authentication, role, namespace and concurrency security tests. |
+
+The backend groups code by responsibility. `main.py` composes the application;
+`core/lifespan.py` owns shared database, logger and graph resources. Investigation
+routes use authentication dependencies and invoke the existing `agent/` package.
+The standalone Kubernetes collectors remain in `diagnostic-service/`. Database
+migrations remain in `migrations/`, and backend tests remain under `tests/`.
+The server command is still `uvicorn backend.main:app`; endpoint URLs and the
+Admin bootstrap command are unchanged.
 
 ## Tests
 
@@ -203,21 +302,21 @@ Run the offline suites explicitly from the repository root:
 
 ```bash
 uv run --locked python -m unittest tests.test_agent_workflow tests.test_backend tests.test_auth -v
-RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s diagnostic-service/tests -v
-uv run --locked python -m unittest discover -s helm/sentinelshop/tests -v
+RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s tests/diagnostic_service -v
+uv run --locked python -m unittest tests.test_lab_chart -v
 ```
 
 These tests mock model and Kubernetes calls. They check the real graph/tool loop, successful and failed API responses, Markdown preservation, tool metadata, retained failure history, redaction, private permissions, rotation, and logging failures. They do not require a real API key or a running cluster. The live Kubernetes test is skipped unless `RUN_K8S_INTEGRATION=1` is set.
 
 Chart tests require the external Helm binary (tested with v3.18.4); PyYAML, HTTPX, and Starlette are explicit `dev` dependencies. They also occur in the runtime dependency graph. Tests use the standard library's `unittest`; pytest is not currently required.
 
-The Docker integration script in `app/tests/` exercises a running Compose lab and changes its workloads. Follow the [application guide](app/README.md) for that separate test setup. The exploratory `diagnostic-service/test_connection.py` also accesses a real cluster; use the explicit suite commands above rather than running it as a test.
+The Docker integration script in `tests/` exercises a running Compose lab and changes its workloads. Follow the [application guide](app/README.md) for that separate test setup. The exploratory `diagnostic-service/test_connection.py` also accesses a real cluster; use the explicit suite commands above rather than running it as a test.
 
 ## Continuous integration
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pushes to `main` and `develop`, and pull requests targeting `main`. One Ubuntu 24.04 job installs uv 0.13.8, the Python version from `.python-version`, and Helm v3.18.4. It uses the official `astral-sh/setup-uv` action with a dependency cache keyed to `uv.lock`, `pyproject.toml`, and `.python-version`. Every run still executes `uv sync --locked` and checks dependency compatibility; the cache never replaces lockfile validation. Actions are pinned to immutable commits.
 
-The job checks Python syntax, runs the agent, backend, diagnostic, and chart test suites above with verbose output, and executes `helm lint ./helm/sentinelshop` and `helm template sentinelshop ./helm/sentinelshop -n aiops`. Any failed setup, check, or test fails the job. Helm renders locally without contacting Kubernetes.
+The job checks Python syntax, runs the agent, backend, diagnostic, and chart test suites above with verbose output, and executes `helm lint ./deploy/test-lab/helm/sentinelshop` and `helm template sentinelshop-lab ./deploy/test-lab/helm/sentinelshop -n aiops`. Any failed setup, check, or test fails the job. Helm renders locally without contacting Kubernetes.
 
 CI grants only `contents: read`, uses no repository secrets, clears the model API key, sets `KUBECONFIG=/dev/null`, disables tracing, and fixes `RUN_K8S_INTEGRATION=0`. The read-only live Kubernetes test remains explicitly opt-in outside CI; the Docker lab integration and exploratory cluster script are also manual. Normal CI makes no paid model calls, deploys nothing, and modifies no cluster resources.
 
@@ -236,7 +335,7 @@ Review changes to both `pyproject.toml` and `uv.lock`, run `uv sync --locked`, `
 Choose the deployment guide for your environment:
 
 - [Docker Compose](app/README.md): run the shop locally and practice dependency outages.
-- [Kubernetes manifests](k8s/README.md): deploy read-only investigation targets and the crash-demo Pod.
-- [Helm chart](helm/sentinelshop/README.md): deploy the shop with configurable images, resources, and replicas.
+- [Kubernetes manifests](deploy/test-lab/manifests/README.md): deploy read-only investigation targets and the crash-demo Pod.
+- [Helm chart](deploy/test-lab/helm/sentinelshop/README.md): deploy the shop with configurable images, resources, and replicas.
 
 The documented Kubernetes lab uses context `kind-sentinelops` and namespace `aiops`. Check your current context before deploying or investigating. Metrics may be unavailable without Metrics Server; collectors preserve other evidence and report the collection error.

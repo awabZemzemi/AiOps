@@ -1,25 +1,44 @@
-"""Create official Kubernetes clients using the current kubeconfig context."""
+"""Create clients with explicitly selected credentials; never use personal defaults."""
 from contextlib import contextmanager
+import os
+from pathlib import Path
 
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
 from kubernetes.config.config_exception import ConfigException
-
-from evidence_common import PodEvidenceError
 from urllib3.exceptions import HTTPError
 
-REQUEST_TIMEOUT = (3, 10)  # Connection timeout, then read timeout (seconds).
+from evidence_common import PodEvidenceError
+
+REQUEST_TIMEOUT = (3, 10)
 API_ERRORS = (ApiException, HTTPError, OSError)
 
 
 @contextmanager
 def kubernetes_clients():
-    # Keep configuration local to this collector; do not rewrite kubeconfig.
     configuration = client.Configuration()
     try:
-        config.load_kube_config(client_configuration=configuration, persist_config=False)
-    except ConfigException as error:
-        raise PodEvidenceError("Cannot load kubeconfig; check KUBECONFIG and the current context") from error
-    configuration.retries = 0  # Do not multiply bounded requests with transport retries.
+        mode = os.environ.get("AIOPS_KUBERNETES_MODE", "")
+        if mode == "kubeconfig":
+            path = os.environ.get("AIOPS_KUBECONFIG_PATH", "")
+            if not path or not Path(path).is_file():
+                raise ConfigException("Explicit kubeconfig file required.")
+            config.load_kube_config(config_file=path, client_configuration=configuration,
+                                    persist_config=False)
+        elif mode == "incluster":
+            config.load_incluster_config(client_configuration=configuration)
+        else:
+            raise ConfigException("Explicit Kubernetes credential mode required.")
+        if (not configuration.host.startswith("https://") or not configuration.verify_ssl
+                or not configuration.ssl_ca_cert or not Path(configuration.ssl_ca_cert).is_file()):
+            raise ConfigException("Verified HTTPS with a CA certificate is required.")
+    except Exception:
+        # Loader exceptions can contain sensitive details. Preserve only the category.
+        error = ConfigException("Restricted Kubernetes credential configuration failed.")
+        raise PodEvidenceError(
+            "Cannot load kubeconfig or in-cluster credentials; check AIOPS_KUBERNETES_MODE "
+            "and AIOPS_KUBECONFIG_PATH; renew expired local credentials."
+        ) from error
+    configuration.retries = 0
     with client.ApiClient(configuration) as api_client:
         yield client.CoreV1Api(api_client), client.CustomObjectsApi(api_client)

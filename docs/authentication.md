@@ -189,8 +189,8 @@ using the process's Kubernetes credentials, outside the HTTP application roles.
 
 ```bash
 uv run --locked python -m unittest tests.test_auth tests.test_agent_workflow tests.test_backend -v
-RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s diagnostic-service/tests -v
-uv run --locked python -m unittest discover -s helm/sentinelshop/tests -v
+RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s tests/diagnostic_service -v
+uv run --locked python -m unittest discover -s tests -v
 ```
 
 Security tests migrate temporary SQLite databases and exercise real Argon2id and
@@ -200,13 +200,12 @@ role restrictions, self-escalation, disabled accounts, last-admin concurrency,
 per-tool denial, forged tool arguments, concurrent HTTP requests with distinct
 permissions, response/log credential exclusion, and migration/bootstrap behavior.
 
-**Deployment blocker: dedicated least-privilege Kubernetes credentials are not
-implemented.** The collectors still load the process's current kubeconfig. Before
-production deployment, provide a dedicated read-only ServiceAccount/credential
-and namespace-scoped Roles/RoleBindings: `get`/`list` on Pods, `get` on `pods/log`,
-`list` on events, and optional `get` on `metrics.k8s.io` Pods. Do not bind the app
-Admin role to Kubernetes cluster-admin. This change grants no Kubernetes writes
-and does not claim complete production security.
+Dedicated Kubernetes ServiceAccount credentials and namespace-scoped RBAC are
+implemented separately. Complete [Kubernetes RBAC setup](../deploy/aiops/README.md), select
+the restricted kubeconfig explicitly, and renew its short-lived token. Application
+Admin permissions do not grant Kubernetes cluster-admin. Only `aiops` is configured;
+the [standalone AIOps Helm chart](../deploy/aiops/helm/aiops/README.md) provides in-cluster
+deployment wiring. Additional diagnostic namespaces remain future work.
 
 Other deployment work remains:
 
@@ -242,15 +241,17 @@ and [argon2-cffi PasswordHasher](https://argon2-cffi.readthedocs.io/en/stable/ap
 
 | Modified files | Change |
 | --- | --- |
-| `backend/main.py`, `backend/logging_setup.py` | Auth startup, protected investigations, runtime context, safe validation/database errors and hash redaction. |
+| `backend/main.py` | Compose the FastAPI application and register its feature routers and error handlers. |
+| `backend/core/lifespan.py`, `errors.py`, `logging.py` | Auth/graph startup and shutdown, safe validation/database errors, private logging and hash redaction. |
+| `backend/investigations/routes.py`, `schemas.py`, `telemetry.py` | Protected investigations, trusted runtime context, API contracts and execution metadata. |
 | `agent/graph.py`, `agent/tools/_common.py`, `agent/tools/{events,logs,metrics,pod_info,pod_listing}.py` | Declare trusted context and check namespaces before all five collectors. |
 | `diagnostic-service/api.py` | Authenticate and authorize direct evidence requests; retain public health. |
-| `tests/test_agent_workflow.py`, `tests/test_backend.py`, `diagnostic-service/tests/test_api.py` | Preserve regression assertions while supplying authenticated identities/context and updated API paths. |
+| `tests/test_agent_workflow.py`, `tests/test_backend.py`, `tests/diagnostic_service/test_api.py` | Preserve regression assertions while supplying authenticated identities/context and updated API paths. |
 | `pyproject.toml`, `uv.lock` | SQLAlchemy, Alembic, Argon2, PyJWT and form parsing dependencies. |
 | `.env.example`, `.gitignore`, `.github/workflows/ci.yml` | Auth configuration examples, ignored local databases, security suite in CI. |
 | `README.md`, `diagnostic-service/README.md` | Authenticated setup/requests and current deployment limitations. |
 
-Verified locally: 66 auth/agent/backend tests passed; 37 diagnostic tests passed
+Verified locally: 68 auth/agent/backend tests passed; 37 diagnostic tests passed
 and one opt-in live Kubernetes test was skipped; all three Helm tests passed.
 `uv sync --locked --offline`, `uv pip check`, Python compilation, Alembic
 upgrade/downgrade/metadata consistency, Helm lint/render, and `git diff --check`

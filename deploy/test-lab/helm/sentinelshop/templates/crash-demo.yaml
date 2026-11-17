@@ -1,0 +1,25 @@
+{{- if .Values.crashDemo.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "sentinelshop.name" . }}-crash-demo
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: crash-demo
+    app.kubernetes.io/instance: {{ .Release.Name | quote }}
+    app.kubernetes.io/part-of: sentinelshop
+spec:
+  containers:
+    - name: crashing-container
+      image: {{ .Values.crashDemo.image | quote }}
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Starting application..."
+          sleep 3
+          echo "ERROR: Database connection failed"
+          exit 1
+  restartPolicy: Always
+{{- end }}

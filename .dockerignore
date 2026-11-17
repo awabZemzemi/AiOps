@@ -1,0 +1,24 @@
+# Allow only the backend's runtime source and locked dependency inputs.
+**
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!backend/
+!backend/**
+!agent/
+!agent/**
+!diagnostic-service/
+!diagnostic-service/**
+!migrations/
+!migrations/**
+**/__pycache__/
+**/*.py[cod]
+**/.env*
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.key
+**/*.pem
+**/*.kubeconfig
+**/tests/
+backend/Dockerfile

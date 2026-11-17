@@ -16,7 +16,7 @@ def collect_container_logs(namespace: str, pod_name: str, container_name: str, *
                            tail_lines: int = DEFAULT_LOG_LINES, core_api=None) -> dict:
     """Return this container's current/previous logs and safe partial errors.
 
-    Uses current kubeconfig unless core_api is supplied. Never prints or follows logs.
+    Uses explicitly configured credentials unless core_api is supplied. Never prints or follows logs.
     """
     validate_target(namespace, pod_name)
     validate_tail_lines(tail_lines)

@@ -2,7 +2,7 @@
 
 Read-only evidence for one Pod, using the official Kubernetes Python client. Reusable tools and a diagnostic router in the unified FastAPI backend expose structured observations. The collector itself does not classify failures, diagnose causes, implement AI agents, or perform remediation.
 
-The existing `test_connection.py` experiment is unchanged. Its Pod/status/log API approach is reused in small functions, without its alert/classification logic. Run the tests below rather than executing the experiment as a test suite: that file connects to the cluster at import time.
+`test_connection.py` is an explicit manual connection check using the shared restricted credential factory. Automated collector and API tests live under `tests/diagnostic_service/` at the repository root; the optional cluster test remains opt-in.
 
 ## Architecture and project structure
 
@@ -14,7 +14,7 @@ HTTP client → backend.main:app → api.router → diagnostics.py
 The same backend also serves POST /agent/investigate.
 ```
 
-The synchronous FastAPI routes validate inputs and translate errors. The collector orchestrates the four independent tools; it does not depend on FastAPI. Each request uses the current kubeconfig, and Kubernetes operations remain read-only. Synchronous routes run in FastAPI's worker thread pool because the collector blocks on network I/O.
+The synchronous FastAPI routes validate inputs and translate errors. The collector orchestrates the four independent tools; it does not depend on FastAPI. Each request uses the explicit Kubernetes credential mode, and Kubernetes operations remain read-only. Synchronous routes run in FastAPI's worker thread pool because the collector blocks on network I/O.
 
 ```text
 diagnostic-service/
@@ -31,8 +31,7 @@ diagnostic-service/
 │   ├── container_logs.py
 │   ├── kubernetes_events.py
 │   └── resource_metrics.py
-├── tests/                     # Collector, tools, CLI, API, live opt-in tests
-└── test_connection.py          # Original exploratory script
+└── test_connection.py          # Explicit manual connection check
 ```
 
 ## Run against kind
@@ -44,7 +43,7 @@ uv sync --locked
 kubectl config current-context
 ```
 
-The collector uses the existing kubeconfig (`KUBECONFIG` is respected) and its current context, just like the experiment. For this lab the context should be `kind-sentinelops`. If necessary, select it explicitly with `kubectl config use-context kind-sentinelops` before running the collector.
+The collector uses explicit restricted credentials. Follow [Kubernetes RBAC setup](../deploy/aiops/README.md), export `AIOPS_KUBERNETES_MODE=kubeconfig` and `AIOPS_KUBECONFIG_PATH` to the generated private file. `KUBECONFIG` and personal defaults are never used by collectors.
 
 ```bash
 uv run --locked python diagnostic-service/main.py crash-demo -n aiops
@@ -77,7 +76,7 @@ uv run --locked uvicorn backend.main:app \
   --log-level info --no-access-log
 ```
 
-`backend.main:app` is the single FastAPI application. It includes the `APIRouter` from `api.py` and the agent endpoint; no second server or HTTP forwarding is needed. The old `api:app --app-dir diagnostic-service` command is replaced by this entry point. Keep the explicit loopback host; the API requires a bearer token and enforces the account's explicit namespace permissions. The collectors still use the server process's Kubernetes identity; dedicated least-privilege credentials remain a deployment blocker. `--no-access-log` avoids recording arbitrary URL query strings; application logs provide safe evidence-request summaries instead. No kubeconfig is loaded at API import/startup or by `/health`.
+`backend.main:app` is the single FastAPI application. It includes the `APIRouter` from `api.py` and the agent endpoint; no second server or HTTP forwarding is needed. The old `api:app --app-dir diagnostic-service` command is replaced by this entry point. Keep the explicit loopback host; the API requires a bearer token and enforces the account's explicit namespace permissions. The collectors still use the server process's Kubernetes identity; dedicated namespace-scoped ServiceAccount credentials must be configured as described in [RBAC setup](../deploy/aiops/README.md). `--no-access-log` avoids recording arbitrary URL query strings; application logs provide safe evidence-request summaries instead. No kubeconfig is loaded at API import/startup or by `/health`.
 
 Open Swagger UI at http://127.0.0.1:8005/docs. FastAPI generates one OpenAPI specification at `/openapi.json` covering diagnostic, investigation, authentication, and user-management endpoints; documentation routes are provided by FastAPI.
 
@@ -140,13 +139,14 @@ INFO: evidence_completed namespace=aiops pod=crash-demo error_count=1 duration_m
 
 Only allowlisted metadata is logged. Container log contents, report bodies, collection error messages, credentials, request headers, and raw exception details are not logged. Validation failures are rejected before the endpoint function, so they do not produce application collection logs. Tool functions remain silent; CLI JSON output still uses stdout intentionally.
 
-The service uses `config.load_kube_config(..., persist_config=False)` with the current context and does not overwrite kubeconfig. Its effective permissions are the permissions of that local identity; read-only code does **not** reduce an administrator identity's privileges. Use only trusted kubeconfigs, since they can include credential plugins that execute local programs. The service never retrieves Secret values.
-
-When eventually deployed inside Kubernetes, use a dedicated ServiceAccount with least-privilege RBAC: namespace-scoped `get` and `list` on Pods, `get` on `pods/log`, `list` on events, and optional `get` on Pod metrics (`metrics.k8s.io`). RBAC defines allowed resource/verb combinations and binds them to identities. In-cluster credential loading, dedicated ServiceAccounts and RBAC manifests are not provided by this service. Application authentication and namespace authorization are implemented separately in the backend; they do not change Kubernetes credentials.
+The service uses only the explicit credential mode and keeps configuration local
+to each client. See [RBAC setup](../deploy/aiops/README.md) for TokenRequest, renewal, TLS,
+namespace permissions and future in-cluster deployment. No personal fallback is
+allowed. Application identities remain independent of the Kubernetes identity.
 
 ## Independent tools
 
-Each function accepts plain inputs and returns a fresh JSON-serializable dictionary. Tools do not print, modify a caller's report, or call other evidence tools. Each tool can load current kubeconfig on its own; an optional `core_api` or `metrics_api` keyword allows client reuse and offline testing. These are ordinary Python functions callable directly or through a wrapper; no framework is required to use them.
+Each function accepts plain inputs and returns a fresh JSON-serializable dictionary. Tools do not print, modify a caller's report, or call other evidence tools. Each tool uses the shared explicit credential factory; an optional `core_api` or `metrics_api` keyword allows client reuse and offline testing. These are ordinary Python functions callable directly or through a wrapper; no framework is required to use them.
 
 Run Python from `diagnostic-service/`:
 
@@ -200,7 +200,7 @@ call `list_pods("aiops")` from `diagnostic-service/`, as shown above.
 
 | File | Responsibility |
 | --- | --- |
-| `kubernetes_client.py` | Loads current kubeconfig into a local configuration and creates/closes the official clients. Sets connection/read timeouts and disables transport retries. |
+| `kubernetes_client.py` | Loads explicitly selected restricted or in-cluster credentials into a local configuration and creates/closes the official clients. Sets connection/read timeouts and disables transport retries. |
 | `diagnostics.py` | Combines independent tool results into the existing report, using one shared client session. |
 | `tools/pod_information.py` | Reads safe Pod metadata and all regular/init/ephemeral container details. |
 | `tools/pod_listing.py` | Lists bounded Pod summaries within a namespace, following pagination. Requires `list` permission on Pods. |
@@ -211,7 +211,7 @@ call `list_pods("aiops")` from `diagnostic-service/`, as shown above.
 | `models.py` | Defines the report's top-level shape and explicitly selects safe fields from Kubernetes models. Converts timestamps to JSON strings. |
 | `main.py` | Argparse collector CLI with JSON stdout and safe nonzero errors. |
 | `api.py` | APIRouter with two synchronous diagnostic routes, validation, safe status mapping, and logging. Included in the unified backend. |
-| `tests/` | Offline mocked tests and an opt-in live integration test. |
+| `../tests/diagnostic_service/` | Offline mocked tests and an opt-in live integration test. |
 
 The collector performs only these Kubernetes reads:
 
@@ -264,7 +264,7 @@ uv sync --locked
 Offline tests use `unittest` and mocked official client models; they do not require cluster access:
 
 ```bash
-RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s diagnostic-service/tests -v
+RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s tests/diagnostic_service -v
 ```
 
 They cover healthy Pods, CrashLoopBackOff, previous OOMKilled termination, missing previous logs, unavailable metrics, multiple container types, missing/inaccessible Pods, partial API/network failures, bounds, UID event filtering, sensitive-field omission, client configuration, and CLI behavior. Additional independent-tool tests check standalone calls, silence, JSON serialization, local partial errors, default client lifecycle, input validation, and UID matching.
@@ -272,7 +272,7 @@ They cover healthy Pods, CrashLoopBackOff, previous OOMKilled termination, missi
 API tests use the unified backend's in-process `TestClient` and patch `api.collect_pod_evidence`; they cover success/report preservation, invalid namespace/Pod/log limits, 404, 403, other upstream statuses, unavailable metrics, safe unexpected errors, worker-thread execution, and shared generated docs. Graph creation and `.env` loading are mocked in these diagnostic route tests, so no model credentials are needed. Logging tests check levels and ensure report/exception contents are excluded. One checks `raise_server_exceptions=True` so unexpected errors cannot escape into the server.
 
 ```bash
-uv run --locked python -m unittest discover -s diagnostic-service/tests -p test_api.py -v
+uv run --locked python -m unittest discover -s tests/diagnostic_service -p test_api.py -v
 ```
 
 The tested dependency versions are recorded in the root `pyproject.toml` and `uv.lock`; use that environment for `TestClient` compatibility.
@@ -281,7 +281,7 @@ If `aiops/crash-demo` exists in the current context, enable the read-only integr
 
 ```bash
 RUN_K8S_INTEGRATION=1 uv run --locked python \
-  -m unittest discover -s diagnostic-service/tests -v
+  -m unittest discover -s tests/diagnostic_service -v
 ```
 
 The test never creates a Pod or changes a workload. It verifies that the report is serializable and includes the expected Pod/container; it does not require a particular restart count or transient container state.
