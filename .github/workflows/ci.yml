@@ -53,13 +53,16 @@ jobs:
           checksum-policy: required
 
       - name: Check Python syntax
-        run: uv run --locked python -m compileall -q agent backend diagnostic-service app test_agent_workflow.py test_backend.py
+        run: uv run --locked python -m compileall -q agent backend migrations diagnostic-service app tests
 
       - name: Test agent and LangGraph workflow
-        run: uv run --locked python -m unittest test_agent_workflow -v
+        run: uv run --locked python -m unittest tests.test_agent_workflow -v
 
       - name: Test FastAPI backend and investigation logging
-        run: uv run --locked python -m unittest test_backend -v
+        run: uv run --locked python -m unittest tests.test_backend -v
+
+      - name: Test authentication and namespace authorization
+        run: uv run --locked python -m unittest tests.test_auth -v
 
       - name: Test diagnostic collectors, tools, CLI, and API
         run: uv run --locked python -m unittest discover -s diagnostic-service/tests -v

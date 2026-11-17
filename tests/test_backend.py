@@ -1,4 +1,4 @@
-"""Offline HTTP and async graph checks: python -m unittest test_backend -v."""
+"""Offline HTTP and async graph checks: python -m unittest tests.test_backend -v."""
 
 import asyncio
 import json
@@ -12,6 +12,8 @@ from unittest.mock import Mock, patch
 from uuid import UUID
 
 from fastapi.testclient import TestClient
+from tests.auth_support import prepare_auth
+from backend.auth.schemas import UserPublic
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, messages_to_dict
 from langgraph.errors import GraphRecursionError
 
@@ -23,6 +25,7 @@ from diagnostics import PodEvidenceError
 
 class PrivateLogTests(unittest.TestCase):
     def setUp(self):
+        self.sessions, self.admin, self.auth_headers = prepare_auth(self)
         self.log_directory = Path(self.enterContext(TemporaryDirectory(prefix="aiops-logs-")))
         self.enterContext(patch.dict(os.environ, {"AIOPS_LOG_DIR": str(self.log_directory)}))
 
@@ -46,7 +49,7 @@ class BackendTests(PrivateLogTests):
         self.graph.astream.side_effect = stream
         self.enterContext(patch("backend.main.load_dotenv"))
         self.factory = self.enterContext(patch("backend.main.create_graph", return_value=self.graph))
-        self.client = self.enterContext(TestClient(app))
+        self.client = self.enterContext(TestClient(app, headers=self.auth_headers))
 
     def test_graph_is_built_at_startup_and_reused(self):
         self.factory.assert_called_once_with()
@@ -222,7 +225,7 @@ class BackendTests(PrivateLogTests):
     def test_cancellation_is_logged_and_propagates(self):
         self.failure = asyncio.CancelledError()
         with self.assertRaises(asyncio.CancelledError):
-            asyncio.run(investigate(InvestigateRequest(message="Inspect demo."), Request({"type": "http", "app": app})))
+            asyncio.run(investigate(InvestigateRequest(message="Inspect demo."), Request({"type": "http", "app": app}), UserPublic.model_validate(self.admin)))
         self.assertEqual(self.entries("operations")[-2]["error_type"], "CancelledError")
         self.assertEqual(self.entries("messages")[0]["status"], "failed")
 
@@ -265,6 +268,7 @@ class BackendTests(PrivateLogTests):
         schema = self.client.get("/openapi.json").json()
         self.assertEqual(set(schema["paths"]), {
             "/health", "/api/v1/pods/{namespace}/{pod_name}/evidence", "/agent/investigate",
+            "/auth/token", "/auth/me", "/users", "/users/{user_id}",
         })
         self.assertEqual(self.client.get("/docs").status_code, 200)
 
@@ -279,7 +283,7 @@ class BackendTests(PrivateLogTests):
 class BackendGraphTests(PrivateLogTests):
     def test_graph_construction_waits_for_lifespan_startup(self):
         with patch("backend.main.load_dotenv"), patch("backend.main.create_graph") as factory:
-            client = TestClient(app)
+            client = TestClient(app, headers=self.auth_headers)
             factory.assert_not_called()
             with client:
                 factory.assert_called_once_with()
@@ -288,7 +292,7 @@ class BackendGraphTests(PrivateLogTests):
     def test_missing_model_key_fails_startup(self):
         with patch("backend.main.load_dotenv"), patch.dict(os.environ, {"GROQ_API_KEY": ""}):
             with self.assertRaisesRegex(ValueError, "GROQ_API_KEY"):
-                with TestClient(app):
+                with TestClient(app, headers=self.auth_headers):
                     pass
 
     def test_http_request_uses_real_async_graph_and_tool_node(self):
@@ -303,7 +307,7 @@ class BackendGraphTests(PrivateLogTests):
         with patch("backend.main.load_dotenv"), \
              patch("agent.graph.create_model", return_value=model), \
              patch("agent.tools.pod_listing.collect_pods", return_value=evidence) as collector:
-            with TestClient(app) as client:
+            with TestClient(app, headers=self.auth_headers) as client:
                 response = client.post("/agent/investigate", json={"message": "List Pods in namespace aiops."})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["answer"], "No Pods found in namespace aiops.")
@@ -327,7 +331,7 @@ class BackendGraphTests(PrivateLogTests):
         with patch("backend.main.load_dotenv"), \
              patch("agent.graph.create_model", return_value=model), \
              patch("agent.tools.pod_listing.collect_pods", return_value=evidence):
-            with TestClient(app) as client:
+            with TestClient(app, headers=self.auth_headers) as client:
                 response = client.post("/agent/investigate", json={"message": "List Pods in namespace aiops."})
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json()["metadata"]["tool_call_count"], 1)
@@ -424,7 +428,7 @@ class BackendEnvironmentTests(PrivateLogTests):
             (root / ".env").write_text("GROQ_API_KEY=test-only-from-file\n")
             os.environ.pop("GROQ_API_KEY", None)
             with patch("backend.main.__file__", str(root / "backend" / "main.py")):
-                with TestClient(app):
+                with TestClient(app, headers=self.auth_headers):
                     self.assertEqual(os.environ["GROQ_API_KEY"], "test-only-from-file")
                     self.assertTrue(callable(app.state.agent.ainvoke))
 
@@ -434,7 +438,7 @@ class BackendEnvironmentTests(PrivateLogTests):
             root = Path(directory)
             (root / ".env").write_text("GROQ_API_KEY=test-only-from-file\n")
             with patch("backend.main.__file__", str(root / "backend" / "main.py")):
-                with TestClient(app):
+                with TestClient(app, headers=self.auth_headers):
                     self.assertEqual(os.environ["GROQ_API_KEY"], "test-only-exported")
 
 

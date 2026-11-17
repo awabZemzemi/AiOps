@@ -31,6 +31,14 @@ messages.jsonl*
 *.p12
 *.pfx
 
+# Local authentication database and SQLite sidecars
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+
 # Downloaded local Kubernetes tooling
 /kubectl
 /kubectl.sha256

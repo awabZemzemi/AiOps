@@ -69,7 +69,7 @@ report = collect_pod_evidence("aiops", "crash-demo")
 
 ## Run FastAPI locally
 
-From the repository root, after `uv sync --locked`, set `GROQ_API_KEY` in the root `.env` file or export it. The unified backend initializes the agent graph at startup; the standalone collector and CLI still need no model credentials.
+From the repository root, after `uv sync --locked`, set `GROQ_API_KEY` in the root `.env` file or export it. Configure `AIOPS_JWT_SECRET`, apply Alembic migrations, and bootstrap the first Admin using the [authentication guide](../docs/authentication.md). The unified backend initializes the agent graph at startup; the standalone collector and CLI still need no model credentials.
 
 ```bash
 uv run --locked uvicorn backend.main:app \
@@ -77,9 +77,9 @@ uv run --locked uvicorn backend.main:app \
   --log-level info --no-access-log
 ```
 
-`backend.main:app` is the single FastAPI application. It includes the `APIRouter` from `api.py` and the agent endpoint; no second server or HTTP forwarding is needed. The old `api:app --app-dir diagnostic-service` command is replaced by this entry point. Keep the explicit loopback host; this API has no user authentication and uses the server process's Kubernetes identity. `--no-access-log` avoids recording arbitrary URL query strings; application logs provide safe evidence-request summaries instead. No kubeconfig is loaded at API import/startup or by `/health`.
+`backend.main:app` is the single FastAPI application. It includes the `APIRouter` from `api.py` and the agent endpoint; no second server or HTTP forwarding is needed. The old `api:app --app-dir diagnostic-service` command is replaced by this entry point. Keep the explicit loopback host; the API requires a bearer token and enforces the account's explicit namespace permissions. The collectors still use the server process's Kubernetes identity; dedicated least-privilege credentials remain a deployment blocker. `--no-access-log` avoids recording arbitrary URL query strings; application logs provide safe evidence-request summaries instead. No kubeconfig is loaded at API import/startup or by `/health`.
 
-Open Swagger UI at http://127.0.0.1:8005/docs. FastAPI generates one OpenAPI specification at `/openapi.json` covering all three application endpoints; documentation routes are provided by FastAPI.
+Open Swagger UI at http://127.0.0.1:8005/docs. FastAPI generates one OpenAPI specification at `/openapi.json` covering diagnostic, investigation, authentication, and user-management endpoints; documentation routes are provided by FastAPI.
 
 | Method and path | Behavior |
 | --- | --- |
@@ -142,7 +142,7 @@ Only allowlisted metadata is logged. Container log contents, report bodies, coll
 
 The service uses `config.load_kube_config(..., persist_config=False)` with the current context and does not overwrite kubeconfig. Its effective permissions are the permissions of that local identity; read-only code does **not** reduce an administrator identity's privileges. Use only trusted kubeconfigs, since they can include credential plugins that execute local programs. The service never retrieves Secret values.
 
-When eventually deployed inside Kubernetes, use a dedicated ServiceAccount with least-privilege RBAC: namespace-scoped `get` on Pods and `pods/log`, `list` on events, and optional `get` on Pod metrics (`metrics.k8s.io`). RBAC defines allowed resource/verb combinations and binds them to identities. In-cluster credential loading, dedicated ServiceAccounts, RBAC manifests, and external API authentication are not provided by this service.
+When eventually deployed inside Kubernetes, use a dedicated ServiceAccount with least-privilege RBAC: namespace-scoped `get` and `list` on Pods, `get` on `pods/log`, `list` on events, and optional `get` on Pod metrics (`metrics.k8s.io`). RBAC defines allowed resource/verb combinations and binds them to identities. In-cluster credential loading, dedicated ServiceAccounts and RBAC manifests are not provided by this service. Application authentication and namespace authorization are implemented separately in the backend; they do not change Kubernetes credentials.
 
 ## Independent tools
 
@@ -290,17 +290,17 @@ The test never creates a Pod or changes a workload. It verifies that the report 
 
 The report is a sequence of reads, not an atomic snapshot. A Pod can restart or be recreated between reads; logs and metrics may refer to a later instant. Events and previous logs are subject to Kubernetes retention, and metrics are current samples rather than history. The collector intentionally does not walk owner workloads, inspect Services/nodes, or fetch external configuration.
 
-The API has no user authentication, report persistence, total collection deadline, or application-level concurrency/rate controls. Root Python dependencies are locked with uv. The evidence response uses a generic dictionary schema rather than a detailed response model. Thread pools are finite, and a timed-out caller does not automatically cancel blocking collection. The collector has no diagnostic rules or remediation; AI investigation is provided separately by the agent endpoint in the same backend.
+The API has persistent users, JWT authentication and namespace authorization; login rate limiting is per process. It has no report persistence, total collection deadline, or investigation admission/concurrency controls. See the [authentication guide](../docs/authentication.md) for deployment limitations. Root Python dependencies are locked with uv. The evidence response uses a generic dictionary schema rather than a detailed response model. Thread pools are finite, and a timed-out caller does not automatically cancel blocking collection. The collector has no diagnostic rules or remediation; AI investigation is provided separately by the agent endpoint in the same backend.
 
 ## Live HTTP verification
 
-Start the local server as described above, select an existing healthy Pod, and request evidence for it and the intentionally crashing Pod. These operations are read-only:
+Start the local server and log in to set `TOKEN` as described in the [authentication guide](../docs/authentication.md), select an existing healthy Pod, and request evidence for it and the intentionally crashing Pod. These operations are read-only:
 
 ```bash
 kubectl -n aiops get pods
 healthy_pod=$(kubectl -n aiops get pods -l app=catalog -o jsonpath='{.items[0].metadata.name}')
-curl -fsS "http://127.0.0.1:8005/api/v1/pods/aiops/$healthy_pod/evidence?tail_lines=20"
-curl -fsS 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20'
+curl -fsS "http://127.0.0.1:8005/api/v1/pods/aiops/$healthy_pod/evidence?tail_lines=20" -H "Authorization: Bearer $TOKEN"
+curl -fsS 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20' -H "Authorization: Bearer $TOKEN"
 ```
 
 Check the report's `target`, `pod`, `containers`, `logs`, `events`, `metrics`, and `collection_errors`. Healthy-container readiness, crash state, restart counts, event counts, and metrics availability depend on the current cluster state; do not expect fixed values. Optional metrics failure should preserve the other sections and HTTP 200. A missing target should return a safe 404.

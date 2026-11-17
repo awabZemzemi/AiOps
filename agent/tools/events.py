@@ -1,14 +1,15 @@
 """LangChain adapter for the existing bounded Kubernetes event collector."""
 
 from langchain.tools import ToolRuntime, tool
+from agent.authorization import AuthorizationContext
 from langchain_core.messages import ToolMessage
 
-from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message
+from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, require_tool_namespace
 from tools.kubernetes_events import collect_kubernetes_events
 
 
 @tool
-def get_events(namespace: str, pod_name: str, runtime: ToolRuntime) -> ToolMessage:
+def get_events(namespace: str, pod_name: str, runtime: ToolRuntime[AuthorizationContext]) -> ToolMessage:
     """Read up to 100 Kubernetes events associated with the supplied Pod.
 
     Use to investigate scheduling, image pulls, probes, or restart problems.
@@ -18,6 +19,7 @@ def get_events(namespace: str, pod_name: str, runtime: ToolRuntime) -> ToolMessa
     An empty result is valid; API errors and truncation are reported separately.
     This tool is read-only.
     """
+    require_tool_namespace(runtime, namespace)
     try:
         evidence = collect_kubernetes_events(namespace, pod_name)
     except COLLECTOR_ERRORS as error:

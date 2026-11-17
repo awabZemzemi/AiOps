@@ -9,6 +9,7 @@ from urllib3.exceptions import HTTPError
 
 from evidence_common import PodEvidenceError
 from kubernetes_client import API_ERRORS
+from agent.authorization import require_tool_namespace
 
 COLLECTOR_ERRORS = (PodEvidenceError, ValueError, *API_ERRORS)
 

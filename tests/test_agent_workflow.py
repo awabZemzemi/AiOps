@@ -1,6 +1,8 @@
-"""Offline regression tests: python -m unittest test_agent_workflow -v."""
+"""Offline regression tests: python -m unittest tests.test_agent_workflow -v."""
 
 from contextlib import ExitStack
+from uuid import uuid4
+from agent.authorization import AuthorizationContext
 import json
 import os
 import unittest
@@ -27,9 +29,10 @@ def tool_request(name, args, call_id="call-1"):
 
 class AgentWorkflowTests(unittest.TestCase):
     def setUp(self):
+        self.context = AuthorizationContext(uuid4(), frozenset(["aiops", "other"]))
         self.tools = get_tools()
         self.tool_graph = (
-            StateGraph(AgentState)
+            StateGraph(AgentState, context_schema=AuthorizationContext)
             .add_node("tools", ToolNode(self.tools))
             .add_edge(START, "tools")
             .add_edge("tools", END)
@@ -67,7 +70,7 @@ class AgentWorkflowTests(unittest.TestCase):
         self.args["get_logs"]["container_name"] = "app"
 
     def invoke_tool(self, name, args=None):
-        result = self.tool_graph.invoke({"messages": [tool_request(name, self.args[name] if args is None else args)]})
+        result = self.tool_graph.invoke({"messages": [tool_request(name, self.args[name] if args is None else args)]}, context=self.context)
         self.assertEqual(set(result), {"messages"})
         message = result["messages"][-1]
         self.assertIsInstance(message, ToolMessage)
@@ -109,7 +112,7 @@ class AgentWorkflowTests(unittest.TestCase):
         with patch("agent.graph.create_model", return_value=model):
             graph = create_graph()
             initial = {"messages": [HumanMessage(content="Inspect demo in namespace aiops.")]}
-            result = graph.invoke(initial)
+            result = graph.invoke(initial, context=self.context)
         self.assertEqual(set(result), {"messages"})
         self.assertEqual(len(result["messages"]), 10)
         self.assertEqual(len(initial["messages"]), 1)
@@ -130,7 +133,7 @@ class AgentWorkflowTests(unittest.TestCase):
             {"name": "get_metrics", "args": target, "id": str(i)}
             for i, target in enumerate(targets)
         ])
-        messages = self.tool_graph.invoke({"messages": [request]})["messages"][1:]
+        messages = self.tool_graph.invoke({"messages": [request]}, context=self.context)["messages"][1:]
         for message, target in zip(messages, targets):
             observation = json.loads(message.content)
             self.assertEqual({key: observation[key] for key in target}, target)
@@ -143,7 +146,7 @@ class AgentWorkflowTests(unittest.TestCase):
                 graph = create_graph()
                 config = {} if limit is None else {"recursion_limit": limit}
                 with self.assertRaises(GraphRecursionError):
-                    graph.invoke({"messages": [HumanMessage(content="Inspect namespace aiops.")]}, config=config)
+                    graph.invoke({"messages": [HumanMessage(content="Inspect namespace aiops.")]}, config=config, context=self.context)
                 self.assertEqual(factory.return_value.invoke.call_count, (limit or 16) // 2)
 
     def test_stream_preserves_message_only_state(self):
@@ -151,7 +154,7 @@ class AgentWorkflowTests(unittest.TestCase):
             factory.return_value.invoke.side_effect = [
                 tool_request("list_pods", self.args["list_pods"]), AIMessage(content="Done."),
             ]
-            values = list(create_graph().stream({"messages": [("user", "List Pods in aiops.")]}, stream_mode="values"))
+            values = list(create_graph().stream({"messages": [("user", "List Pods in aiops.")]}, stream_mode="values", context=self.context))
         self.assertTrue(all(set(value) == {"messages"} for value in values))
         self.assertEqual(len(values[-1]["messages"]), 4)
 

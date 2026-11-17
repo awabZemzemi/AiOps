@@ -17,6 +17,7 @@ SENSITIVE_KEY = re.compile(
 )
 TOKEN_METRIC = re.compile(r"^(?:token_usage|token_count|(?:input|output|total|cached|reasoning)_tokens)$", re.I)
 TEXT_PATTERNS = [
+    (re.compile(r"\$argon2(?:id|i|d)\$[^\s\"'<>]+"), REDACTED),
     (re.compile(r"-----BEGIN [^-]*PRIVATE KEY-----.*?-----END [^-]*PRIVATE KEY-----", re.S), REDACTED),
     (re.compile(r"\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+", re.I), REDACTED),
     (re.compile(r"(\b[a-z][a-z0-9+.-]*://)[^\s/@]+(?::[^\s/@]*)?@", re.I), r"\1[REDACTED]@"),

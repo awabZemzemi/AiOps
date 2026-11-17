@@ -1,9 +1,10 @@
 """LangChain adapter for the existing CPU and memory metrics collector."""
 
 from langchain.tools import ToolRuntime, tool
+from agent.authorization import AuthorizationContext
 from langchain_core.messages import ToolMessage
 
-from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message
+from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, require_tool_namespace
 from models import MAX_TEXT_CHARS, text
 from tools.resource_metrics import collect_resource_metrics
 
@@ -11,7 +12,7 @@ MAX_METRIC_CONTAINERS = 100
 
 
 @tool
-def get_metrics(namespace: str, pod_name: str, runtime: ToolRuntime) -> ToolMessage:
+def get_metrics(namespace: str, pod_name: str, runtime: ToolRuntime[AuthorizationContext]) -> ToolMessage:
     """Read current per-container CPU and memory usage for the supplied Pod.
 
     Use to investigate resource usage after get_pod_info verifies a target.
@@ -21,6 +22,7 @@ def get_metrics(namespace: str, pod_name: str, runtime: ToolRuntime) -> ToolMess
     errors without inventing measurements. This is read-only and does not
     collect historical usage.
     """
+    require_tool_namespace(runtime, namespace)
     try:
         evidence = collect_resource_metrics(namespace, pod_name)
     except COLLECTOR_ERRORS as error:

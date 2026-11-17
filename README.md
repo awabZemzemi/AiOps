@@ -23,9 +23,15 @@ uv sync --locked
 cp .env.example .env
 ```
 
-Set `GROQ_API_KEY` in `.env`, then check your Kubernetes context and start the backend:
+Set `GROQ_API_KEY` and a randomly generated `AIOPS_JWT_SECRET` (at least 32 bytes)
+in `.env`. See [authentication setup and API examples](docs/authentication.md).
+Apply migrations and create your first Admin with a hidden password prompt,
+then check your Kubernetes context and start the backend:
 
 ```bash
+chmod 600 .env
+uv run --locked alembic upgrade head
+uv run --locked python -m backend.auth.bootstrap --username admin --namespace aiops
 kubectl config current-context
 uv run --locked uvicorn backend.main:app \
   --host 127.0.0.1 --port 8005 --no-access-log
@@ -46,16 +52,21 @@ curl http://127.0.0.1:8005/health
 # {"status":"ok"}
 ```
 
-The API uses your server process's Kubernetes identity and has no user authentication. Keep the local server bound to `127.0.0.1`.
+The API requires JWT authentication and enforces each user's explicit namespace
+permissions, including inside agent tools. `/health` remains public. Dedicated
+least-privilege Kubernetes credentials are still a deployment blocker: collectors
+use the server process's kubeconfig. Keep local development bound to `127.0.0.1`.
 
 ## Investigate a workload
 
-Include the namespace and, when known, the Pod name:
+Log in as described in the [authentication guide](docs/authentication.md#api-examples)
+and set `TOKEN` to the access token. Include the namespace and, when known, the Pod name:
 
 ```bash
 curl -sS http://127.0.0.1:8005/agent/investigate \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"message":"Check Pod crash-demo in namespace aiops. Explain the evidence and suggest next steps."}'
+  -d '{"namespace":"aiops","message":"Check Pod crash-demo in namespace aiops. Explain the evidence and suggest next steps."}'
 ```
 
 If you do not know the Pod name, ask `List Pods in namespace aiops.` first. Requests are independent; the endpoint does not retain a conversation between requests.
@@ -89,6 +100,8 @@ Responses are validated with Pydantic. The `answer` preserves the final model me
 | HTTP status | Behavior |
 | --- | --- |
 | `200` | Returns the completed investigation. |
+| `401` | Missing, invalid, expired token or disabled account. |
+| `403` | Namespace access denied at the request or tool boundary. |
 | `422` | Rejects missing, blank, or non-string messages before running the graph; uses FastAPI's validation response. |
 | `503` | Graph step limit reached; returns `status: "failed"` and the metadata collected so far. |
 | `500` | Investigation failed; returns `status: "failed"` and a generic explanation without raw exception details. |
@@ -104,9 +117,12 @@ The same backend exposes the existing collectors directly:
 | `GET /health` | Process health; does not query the model or cluster. |
 | `GET /api/v1/pods/{namespace}/{pod_name}/evidence` | Structured Pod/container details, logs, events, metrics, and collection errors. |
 | `POST /agent/investigate` | Agent-led investigation and diagnostic answer. |
+| `POST /auth/token`, `GET /auth/me` | Login and current account. |
+| `POST /users`, `GET /users`, `PATCH /users/{user_id}` | Admin-only account management. |
 
 ```bash
-curl -sS 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20'
+curl -sS 'http://127.0.0.1:8005/api/v1/pods/aiops/crash-demo/evidence?tail_lines=20' \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 Direct CLI collection does not require model credentials:
@@ -170,8 +186,8 @@ The current model profile is `gpt_oss_120b` on Groq, configured in `agent/factor
 | `app/` | SentinelShop services and Docker Compose lab. |
 | `k8s/` | Raw Kubernetes manifests and the intentional crash-demo workload. |
 | `helm/sentinelshop/` | Configurable Helm chart and rendering tests. |
-| `test_agent_workflow.py` | Offline graph and tool regression tests. |
-| `test_backend.py` | Offline API, logging, and graph integration tests. |
+| `tests/test_agent_workflow.py` | Offline graph and tool regression tests. |
+| `tests/test_backend.py` | Offline API, logging, and graph integration tests. |
 
 ## Tests
 
@@ -186,7 +202,7 @@ uv pip check
 Run the offline suites explicitly from the repository root:
 
 ```bash
-uv run --locked python -m unittest test_agent_workflow test_backend -v
+uv run --locked python -m unittest tests.test_agent_workflow tests.test_backend tests.test_auth -v
 RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s diagnostic-service/tests -v
 uv run --locked python -m unittest discover -s helm/sentinelshop/tests -v
 ```

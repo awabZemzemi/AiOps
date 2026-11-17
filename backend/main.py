@@ -3,12 +3,14 @@
 from contextlib import asynccontextmanager
 import asyncio
 from pathlib import Path
+import secrets
 from time import perf_counter
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, messages_to_dict
 from langgraph.errors import GraphRecursionError
@@ -18,10 +20,20 @@ from agent.graph import create_graph
 # The graph's tool package sets up imports for the existing standalone collectors.
 from api import router as diagnostic_router
 from .logging_setup import configure_logging, log_event
+from agent.authorization import NamespaceAccessDenied
+from .auth.config import AuthSettings, database_url
+from .auth.database import check_schema, make_engine, make_sessions
+from .auth.dependencies import CurrentUser, authorization_context
+from .auth.rate_limit import LoginLimiter
+from .auth.routes import router as auth_router
+from .auth.schemas import Namespace
+from .auth.security import hash_password
+from sqlalchemy.exc import SQLAlchemyError
 
 
 class InvestigateRequest(BaseModel):
     message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    namespace: Namespace | None = None
 
 
 class InvestigationMetadata(BaseModel):
@@ -63,27 +75,52 @@ def tool_metadata(messages) -> dict:
 async def lifespan(app: FastAPI):
     """Build the graph once at startup, before accepting requests."""
     load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-    app.state.operations_log, app.state.messages_log = configure_logging()
+    app.state.auth_settings = AuthSettings.from_env()
+    engine = make_engine(database_url())
     try:
-        app.state.agent = create_graph()
-        yield
+        check_schema(engine)
+        app.state.sessions = make_sessions(engine)
+        app.state.login_limiter = LoginLimiter()
+        app.state.dummy_password_hash = hash_password(secrets.token_urlsafe(32))
+        app.state.operations_log, app.state.messages_log = configure_logging()
+        try:
+            app.state.agent = create_graph()
+            yield
+        finally:
+            for logger in (app.state.operations_log, app.state.messages_log):
+                for handler in logger.handlers[:]:
+                    logger.removeHandler(handler)
+                    handler.close()
     finally:
-        for logger in (app.state.operations_log, app.state.messages_log):
-            for handler in logger.handlers[:]:
-                logger.removeHandler(handler)
-                handler.close()
+        engine.dispose()
 
 
 app = FastAPI(title="AiOps Backend", version="0.1.0", lifespan=lifespan)
 app.include_router(diagnostic_router)
+app.include_router(auth_router)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, error: RequestValidationError):
+    # FastAPI's default validation body echoes inputs, including bad passwords.
+    return JSONResponse(status_code=422, content={"detail": [
+        {key: item[key] for key in ("loc", "msg", "type") if key in item}
+        for item in error.errors()
+    ]})
+
+
+@app.exception_handler(SQLAlchemyError)
+async def database_error(request: Request, error: SQLAlchemyError):
+    return JSONResponse(status_code=503, content={"detail": "Authentication database unavailable."})
 
 
 @app.post("/agent/investigate", response_model=InvestigateResponse, responses={
     500: {"model": InvestigateResponse, "description": "Investigation failed"},
     503: {"model": InvestigateResponse, "description": "Graph step limit reached"},
 })
-async def investigate(payload: InvestigateRequest, request: Request):
+async def investigate(payload: InvestigateRequest, request: Request, user: CurrentUser):
     """Run an independent investigation with local telemetry outside the graph."""
+    context = authorization_context(user, payload.namespace)
     investigation_id = uuid4()
     started = perf_counter()
     messages = [HumanMessage(content=payload.message)]
@@ -96,6 +133,7 @@ async def investigate(payload: InvestigateRequest, request: Request):
         async for state in request.app.state.agent.astream(
             {"messages": messages}, stream_mode="values",
             config={"metadata": {"investigation_id": str(investigation_id)}},
+            context=context,
         ):
             messages = state["messages"]
         final = messages[-1]
@@ -103,6 +141,10 @@ async def investigate(payload: InvestigateRequest, request: Request):
             raise ValueError("Graph did not produce a final diagnostic answer.")
         answer = final.text
         status, status_code = "completed", 200
+    except NamespaceAccessDenied as exc:
+        error = exc
+        status_code = 403
+        answer = "Namespace access denied."
     except GraphRecursionError as exc:
         error = exc
         status_code = 503

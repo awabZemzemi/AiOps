@@ -3,7 +3,8 @@ import logging
 from time import perf_counter
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from backend.auth.dependencies import namespace_access
 
 from diagnostics import DEFAULT_LOG_LINES, MAX_LOG_LINES, PodEvidenceError, collect_pod_evidence
 
@@ -29,7 +30,8 @@ def health() -> dict:
     return {"status": "ok"}
 
 
-@router.get("/api/v1/pods/{namespace}/{pod_name}/evidence", responses={
+@router.get("/api/v1/pods/{namespace}/{pod_name}/evidence",
+            dependencies=[Depends(namespace_access)], responses={
     403: {"description": "Kubernetes access to the target is forbidden"},
     404: {"description": "Target Pod does not exist"},
     429: {"description": "Kubernetes API rate limit exceeded"},

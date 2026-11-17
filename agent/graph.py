@@ -7,6 +7,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from .factory import create_model
 from .state import AgentState
 from .tools import get_tools
+from .authorization import AuthorizationContext
 
 
 def create_graph(profile: str = "gpt_oss_120b") -> CompiledStateGraph:
@@ -21,7 +22,7 @@ def create_graph(profile: str = "gpt_oss_120b") -> CompiledStateGraph:
     def call_agent(state: AgentState) -> dict:
         return {"messages": [llm.invoke(state)]}
 
-    builder = StateGraph(AgentState)
+    builder = StateGraph(AgentState, context_schema=AuthorizationContext)
     builder.add_node("agent", call_agent)
     builder.add_node("tools", ToolNode(tools))
     builder.add_edge(START, "agent")
