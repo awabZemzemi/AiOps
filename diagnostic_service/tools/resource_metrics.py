@@ -1,6 +1,6 @@
 """Independent optional resource metrics evidence tool."""
-from evidence_common import collection_error, validate_target
-from kubernetes_client import API_ERRORS, REQUEST_TIMEOUT, kubernetes_clients
+from diagnostic_service.evidence_common import collection_error, validate_target
+from diagnostic_service.kubernetes_client import API_ERRORS, REQUEST_TIMEOUT, kubernetes_clients
 
 
 def collect_resource_metrics(namespace: str, pod_name: str, *, pod_uid: str | None = None,

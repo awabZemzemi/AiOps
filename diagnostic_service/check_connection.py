@@ -1,6 +1,6 @@
 """Manual connection check using the same explicit identity as all collectors."""
-from evidence_common import PodEvidenceError
-from kubernetes_client import API_ERRORS, kubernetes_clients
+from diagnostic_service.evidence_common import PodEvidenceError
+from diagnostic_service.kubernetes_client import API_ERRORS, kubernetes_clients
 
 if __name__ == "__main__":
     try:

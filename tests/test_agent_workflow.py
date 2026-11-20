@@ -19,8 +19,8 @@ from agent.graph import create_graph
 from agent.factory import create_model
 from agent.state import AgentState
 from agent.tools import get_tools
-from evidence_common import PodEvidenceError
-from models import MAX_TEXT_CHARS
+from diagnostic_service.evidence_common import PodEvidenceError
+from diagnostic_service.models import MAX_TEXT_CHARS
 
 
 def tool_request(name, args, call_id="call-1"):

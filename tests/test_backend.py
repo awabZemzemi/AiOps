@@ -22,7 +22,7 @@ from backend.investigations.routes import investigate
 from backend.investigations.schemas import InvestigateRequest, InvestigateResponse
 from backend.core.logging import configure_logging, log_event, redact
 from starlette.requests import Request
-from diagnostics import PodEvidenceError
+from diagnostic_service.diagnostics import PodEvidenceError
 
 
 class PrivateLogTests(unittest.TestCase):
@@ -252,7 +252,7 @@ class BackendTests(PrivateLogTests):
 
     def test_unified_app_serves_health_evidence_and_investigations(self):
         report = {"pod": {"name": "demo", "namespace": "aiops"}, "collection_errors": []}
-        with patch("api.collect_pod_evidence", return_value=report) as collector:
+        with patch("backend.evidence.routes.collect_pod_evidence", return_value=report) as collector:
             self.assertEqual(self.client.get("/health").json(), {"status": "ok"})
             collector.assert_not_called()
             self.graph.astream.assert_not_called()
@@ -275,7 +275,7 @@ class BackendTests(PrivateLogTests):
         self.assertEqual(self.client.get("/docs").status_code, 200)
 
     def test_evidence_errors_preserve_existing_http_status(self):
-        with patch("api.collect_pod_evidence", side_effect=PodEvidenceError("private token", 404)):
+        with patch("backend.evidence.routes.collect_pod_evidence", side_effect=PodEvidenceError("private token", 404)):
             response = self.client.get("/api/v1/pods/aiops/demo/evidence")
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json(), {"detail": "Pod not found."})

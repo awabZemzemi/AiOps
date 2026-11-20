@@ -33,9 +33,10 @@ values or manifests. The Secret must contain `AIOPS_JWT_SECRET` (a strong random
 value of at least 32 bytes) and `GROQ_API_KEY`. Keep the same JWT secret across
 restarts/upgrades, unless intentionally invalidating existing access tokens.
 
-For local development, copy these two values from your existing private root
-`.env` into a temporary private file, then create the Secret without putting
-values in command-line arguments:
+For a first local Kind deployment, read the Groq key from your private root
+`.env` and reuse its JWT key if configured; otherwise generate a fresh JWT key
+for the new Kubernetes Secret. Values pass through a private temporary file,
+not command-line arguments. Run this only for a new Secret; upgrades reuse it:
 
 ```bash
 kubectl --context kind-sentinelops create namespace aiops-system
@@ -46,7 +47,11 @@ secret_file=$(mktemp)
 trap 'rm -f "$secret_file"' EXIT
 uv run --locked python -c '
 from dotenv import dotenv_values
+import secrets
 values = dotenv_values(".env")
+values["AIOPS_JWT_SECRET"] = values.get("AIOPS_JWT_SECRET") or secrets.token_urlsafe(48)
+if len(values["AIOPS_JWT_SECRET"].encode()) < 32:
+    raise SystemExit("Configured JWT key must contain at least 32 bytes")
 for name in ("AIOPS_JWT_SECRET", "GROQ_API_KEY"):
     value = values.get(name, "")
     if not value or "\n" in value or "\r" in value:
@@ -84,18 +89,10 @@ in-cluster projected ServiceAccount credentials; no local kubeconfig or static
 ServiceAccount token is copied into the image or chart. The Pod explicitly enables
 token mounting because the ServiceAccount disables implicit mounting by default.
 
-Create the first Admin with a hidden password prompt, once:
-
-```bash
-kubectl --context kind-sentinelops -n aiops-system exec -it \
-  deployment/aiops-backend -- python -m backend.auth.bootstrap \
-  --username admin --namespace aiops
-```
-
-Follow the [authentication guide](../../../../docs/authentication.md) for login and API
-requests. Application namespace permissions are independent of Kubernetes RBAC;
-bootstrapping an Admin without `--namespace aiops` grants no diagnostic access.
-No default account is created.
+Create the first Admin using the authoritative
+[bootstrap and API access guide](../../../../docs/authentication.md#first-admin).
+No default credentials are created. This chart sets in-cluster credentials;
+application users still need explicit namespace permissions.
 
 ## Values, security and persistence
 

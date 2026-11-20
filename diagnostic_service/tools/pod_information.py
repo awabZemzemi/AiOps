@@ -1,7 +1,7 @@
 """Independent Pod and container metadata evidence tool."""
-from evidence_common import PodEvidenceError, validate_target
-from kubernetes_client import API_ERRORS, REQUEST_TIMEOUT, kubernetes_clients
-from models import container_info, pod_info
+from diagnostic_service.evidence_common import PodEvidenceError, validate_target
+from diagnostic_service.kubernetes_client import API_ERRORS, REQUEST_TIMEOUT, kubernetes_clients
+from diagnostic_service.models import container_info, pod_info
 
 
 def collect_pod_information(namespace: str, pod_name: str, *, core_api=None) -> dict:

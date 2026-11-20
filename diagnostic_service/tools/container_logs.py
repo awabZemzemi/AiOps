@@ -1,6 +1,6 @@
 """Independent, bounded container log evidence tool."""
-from evidence_common import collection_error, validate_target
-from kubernetes_client import API_ERRORS, REQUEST_TIMEOUT, kubernetes_clients
+from diagnostic_service.evidence_common import collection_error, validate_target
+from diagnostic_service.kubernetes_client import API_ERRORS, REQUEST_TIMEOUT, kubernetes_clients
 
 DEFAULT_LOG_LINES = 100
 MAX_LOG_LINES = 1000

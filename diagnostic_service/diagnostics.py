@@ -2,15 +2,15 @@
 from datetime import datetime, timezone
 
 # Keep existing constant/error imports working for callers and the original tests.
-from tools.container_logs import (
+from diagnostic_service.tools.container_logs import (
     DEFAULT_LOG_LINES, MAX_LOG_BYTES, MAX_LOG_LINES, collect_container_logs, validate_tail_lines,
 )
-from evidence_common import PodEvidenceError, validate_target
-from kubernetes_client import kubernetes_clients
-from tools.kubernetes_events import MAX_EVENTS, collect_kubernetes_events
-from models import EvidenceReport
-from tools.pod_information import collect_pod_information
-from tools.resource_metrics import collect_resource_metrics
+from diagnostic_service.evidence_common import PodEvidenceError, validate_target
+from diagnostic_service.kubernetes_client import kubernetes_clients
+from diagnostic_service.tools.kubernetes_events import MAX_EVENTS, collect_kubernetes_events
+from diagnostic_service.models import EvidenceReport
+from diagnostic_service.tools.pod_information import collect_pod_information
+from diagnostic_service.tools.resource_metrics import collect_resource_metrics
 
 
 def _collect(namespace, pod_name, tail_lines, core_api, metrics_api):

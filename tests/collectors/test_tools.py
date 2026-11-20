@@ -7,18 +7,17 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "diagnostic-service"))
 from kubernetes import client
 from kubernetes.client.exceptions import ApiException
 from kubernetes.config.config_exception import ConfigException
 
-from tools import container_logs
-import kubernetes_client
-from tools import kubernetes_events
-from tools import pod_information
-from tools import resource_metrics
-from evidence_common import PodEvidenceError
-from tests.diagnostic_service.test_diagnostics import make_pod, event
+from diagnostic_service.tools import container_logs
+from diagnostic_service import kubernetes_client
+from diagnostic_service.tools import kubernetes_events
+from diagnostic_service.tools import pod_information
+from diagnostic_service.tools import resource_metrics
+from diagnostic_service.evidence_common import PodEvidenceError
+from tests.collectors.test_diagnostics import make_pod, event
 
 
 class IndependentToolTests(unittest.TestCase):

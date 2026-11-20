@@ -6,14 +6,13 @@ import sys
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "diagnostic-service"))
 from fastapi.testclient import TestClient
 from tests.auth_support import prepare_auth
 from kubernetes.client.exceptions import ApiException
 
-import api
+from backend.evidence import routes as api
 from backend.main import app
-from diagnostics import DEFAULT_LOG_LINES, MAX_LOG_LINES, PodEvidenceError
+from diagnostic_service.diagnostics import DEFAULT_LOG_LINES, MAX_LOG_LINES, PodEvidenceError
 
 REPORT = {
     "timestamp": "2026-10-20T10:00:00+00:00",
@@ -34,7 +33,7 @@ class ApiTests(unittest.TestCase):
         self.enterContext(patch("backend.core.lifespan.load_dotenv"))
         self.enterContext(patch("backend.core.lifespan.create_graph"))
         self.client = self.enterContext(TestClient(app, headers=self.auth_headers, raise_server_exceptions=False))
-        patcher = patch("api.collect_pod_evidence", return_value=deepcopy(REPORT))
+        patcher = patch("backend.evidence.routes.collect_pod_evidence", return_value=deepcopy(REPORT))
         self.collector = patcher.start()
         self.addCleanup(patcher.stop)
 

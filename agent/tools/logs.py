@@ -8,7 +8,7 @@ from langchain_core.messages import ToolMessage
 from pydantic import Field
 
 from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, require_tool_namespace
-from tools.container_logs import DEFAULT_LOG_LINES, MAX_LOG_LINES, collect_container_logs
+from diagnostic_service.tools.container_logs import DEFAULT_LOG_LINES, MAX_LOG_LINES, collect_container_logs
 
 
 @tool

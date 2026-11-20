@@ -16,7 +16,7 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY backend/ backend/
 COPY agent/ agent/
-COPY diagnostic-service/ diagnostic-service/
+COPY diagnostic_service/ diagnostic_service/
 COPY migrations/ migrations/
 COPY alembic.ini ./
 RUN groupadd --gid 10001 aiops && useradd --uid 10001 --gid aiops --no-create-home aiops \

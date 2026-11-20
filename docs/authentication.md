@@ -4,22 +4,11 @@ The unified FastAPI backend uses persistent application identities. Its Admin
 and Operator roles have no relationship to Kubernetes roles or credentials.
 All Kubernetes operations remain read-only.
 
-## Local setup and first Admin
+## Authentication configuration
 
-Run from the repository root:
-
-```bash
-uv sync --locked
-# Copy only when you do not already have a local configuration:
-cp .env.example .env
-chmod 600 .env
-uv run --locked python -c 'import secrets; print(secrets.token_urlsafe(48))'
-```
-
-Store the generated value as `AIOPS_JWT_SECRET` in the private `.env` file or
-inject it through your environment/secret manager. Set `GROQ_API_KEY` too.
-There is no fallback signing secret and no default account. Never commit either
-secret. Exported environment variables take precedence over `.env`.
+The [local startup guide](local-development.md) owns environment/database/server
+setup. The [Helm guide](../deploy/aiops/helm/aiops/README.md) owns image, Secret and
+cluster startup. Authentication settings are:
 
 | Variable | Default / requirement |
 | --- | --- |
@@ -29,13 +18,24 @@ secret. Exported environment variables take precedence over `.env`.
 | `AIOPS_ACCESS_TOKEN_MINUTES` | `15`; allowed range 1–60. |
 | `AIOPS_DATABASE_URL` | `sqlite:///./aiops.db`; relative to the working directory. |
 
-Create the schema explicitly, then bootstrap the first Admin:
+## First Admin
+
+For local Ubuntu, after applying migrations:
 
 ```bash
-uv run --locked alembic upgrade head
 uv run --locked python -m backend.auth.bootstrap --username admin --namespace aiops
-uv run --locked uvicorn backend.main:app --host 127.0.0.1 --port 8005 --no-access-log
 ```
+
+For the running Kubernetes deployment:
+
+```bash
+kubectl --context kind-sentinelops -n aiops-system exec -it \
+  deployment/aiops-backend -c backend -- \
+  python -m backend.auth.bootstrap --username admin --namespace aiops
+```
+
+There is no default account. Bootstrap works only with an empty users table.
+Create subsequent accounts through the authenticated Admin-only API below.
 
 The bootstrap prompts twice using `getpass`; passwords never enter command-line
 arguments. It refuses terminals without hidden input, accepts nonempty Admin
@@ -189,7 +189,7 @@ using the process's Kubernetes credentials, outside the HTTP application roles.
 
 ```bash
 uv run --locked python -m unittest tests.test_auth tests.test_agent_workflow tests.test_backend -v
-RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s tests/diagnostic_service -v
+RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s tests/collectors -v
 uv run --locked python -m unittest discover -s tests -v
 ```
 
@@ -226,36 +226,3 @@ Other deployment work remains:
 
 Library references: [PyJWT validation](https://pyjwt.readthedocs.io/en/latest/usage.html)
 and [argon2-cffi PasswordHasher](https://argon2-cffi.readthedocs.io/en/stable/api.html).
-
-## Change inventory and verified results
-
-| Created files | Purpose |
-| --- | --- |
-| `backend/auth/__init__.py`, `config.py`, `database.py`, `models.py` | Auth package, environment configuration, session lifecycle and portable models. |
-| `backend/auth/schemas.py`, `security.py`, `dependencies.py` | Validated input/public output, hashing/JWTs, current-account and role/namespace checks. |
-| `backend/auth/accounts.py`, `routes.py`, `rate_limit.py`, `bootstrap.py` | Serialized account changes, HTTP endpoints, login limiter and hidden-prompt bootstrap. |
-| `agent/authorization.py` | Immutable trusted run context and tool-boundary enforcement. |
-| `alembic.ini`, `migrations/env.py`, `migrations/script.py.mako`, `migrations/versions/0001_users.py` | Explicit portable schema migration workflow. |
-| `tests/auth_support.py`, `tests/test_auth.py` | Temporary migrated databases and offline security regression tests. |
-| `docs/authentication.md` | Setup, API examples, design and security limits. |
-
-| Modified files | Change |
-| --- | --- |
-| `backend/main.py` | Compose the FastAPI application and register its feature routers and error handlers. |
-| `backend/core/lifespan.py`, `errors.py`, `logging.py` | Auth/graph startup and shutdown, safe validation/database errors, private logging and hash redaction. |
-| `backend/investigations/routes.py`, `schemas.py`, `telemetry.py` | Protected investigations, trusted runtime context, API contracts and execution metadata. |
-| `agent/graph.py`, `agent/tools/_common.py`, `agent/tools/{events,logs,metrics,pod_info,pod_listing}.py` | Declare trusted context and check namespaces before all five collectors. |
-| `diagnostic-service/api.py` | Authenticate and authorize direct evidence requests; retain public health. |
-| `tests/test_agent_workflow.py`, `tests/test_backend.py`, `tests/diagnostic_service/test_api.py` | Preserve regression assertions while supplying authenticated identities/context and updated API paths. |
-| `pyproject.toml`, `uv.lock` | SQLAlchemy, Alembic, Argon2, PyJWT and form parsing dependencies. |
-| `.env.example`, `.gitignore`, `.github/workflows/ci.yml` | Auth configuration examples, ignored local databases, security suite in CI. |
-| `README.md`, `diagnostic-service/README.md` | Authenticated setup/requests and current deployment limitations. |
-
-Verified locally: 68 auth/agent/backend tests passed; 37 diagnostic tests passed
-and one opt-in live Kubernetes test was skipped; all three Helm tests passed.
-`uv sync --locked --offline`, `uv pip check`, Python compilation, Alembic
-upgrade/downgrade/metadata consistency, Helm lint/render, and `git diff --check`
-passed. FastAPI TestClient suites ran outside the filesystem/network sandbox
-because its event-loop thread stalled inside the sandbox. Model and Kubernetes
-calls were still mocked. No credentials were added to the repository, and no
-commit or push was performed.

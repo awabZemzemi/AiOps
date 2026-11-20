@@ -1,5 +1,10 @@
 # SentinelShop Kubernetes lab
 
+These are manual/raw examples, not the supported Helm deployment path. Use the
+[Test Lab guide](../README.md) for normal installation and removal. Never apply
+these files over Helm-owned resources; maintain raw scenarios only when needed
+for an explicit manual exercise. The chart is the deployment source of truth.
+
 For a configurable Helm deployment, use the [SentinelShop chart](../helm/sentinelshop/README.md).
 
 Run commands from the repository root (`AiOps/`). The application code stays in `app/`; these manifests define its Kubernetes runtime. Start with one replica per component to make failures visible.

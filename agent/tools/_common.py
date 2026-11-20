@@ -7,8 +7,8 @@ from langchain.tools import ToolRuntime
 from langchain_core.messages import ToolMessage
 from urllib3.exceptions import HTTPError
 
-from evidence_common import PodEvidenceError
-from kubernetes_client import API_ERRORS
+from diagnostic_service.evidence_common import PodEvidenceError
+from diagnostic_service.kubernetes_client import API_ERRORS
 from agent.authorization import require_tool_namespace
 
 COLLECTOR_ERRORS = (PodEvidenceError, ValueError, *API_ERRORS)

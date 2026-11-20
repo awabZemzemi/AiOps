@@ -1,5 +1,9 @@
 # AIOps deployment and local credentials
 
+The [AIOps Helm guide](helm/aiops/README.md) is authoritative for Kubernetes
+installation. The standalone manifest below provisions only the alternative
+Ubuntu restricted-credential workflow; it must not manage Helm-owned objects.
+
 Two supported modes are independent of the Test Lab:
 
 - **Local Ubuntu:** run `backend.main:app` using the explicitly selected private
@@ -65,12 +69,13 @@ There is no watch, write, Secrets, node, Deployment, cluster-scoped, metrics-lis
 or `events.k8s.io` permission. The manifest is separate from the SentinelShop
 Helm chart because that chart deploys lab workloads, not the external backend.
 
-## Apply to Kind
+## Provision the local-development identity
 
 Use your administrative context only for provisioning:
 
 ```bash
-kubectl --context kind-sentinelops apply -f deploy/test-lab/manifests/namespace.yaml
+# If the target namespace does not already exist:
+kubectl --context kind-sentinelops create namespace aiops
 kubectl --context kind-sentinelops apply -f deploy/aiops/manifests/aiops-agent-rbac.yaml
 ```
 
@@ -110,9 +115,7 @@ The standalone collectors/CLI require exported variables, as above. Do not set
 requires the explicit administrative context. Do not store this file in Git.
 
 ```bash
-uv run --locked uvicorn backend.main:app --host 127.0.0.1 --port 8005 --no-access-log
-# Or use the standalone collector without model credentials:
-uv run --locked python diagnostic-service/main.py crash-demo -n aiops
+uv run --locked python -m diagnostic_service crash-demo -n aiops
 ```
 
 Missing/unknown `AIOPS_KUBERNETES_MODE`, missing paths, invalid configs, and
@@ -147,7 +150,7 @@ restricted file and perform real Pod/log/event reads. Use server dry-run for any
 negative write probes, so an unexpected existing grant cannot mutate workloads.
 A missing metrics API or sample is not a permission failure; do not broaden RBAC.
 
-## In-cluster deployment
+## In-cluster identity
 
 Set `AIOPS_KUBERNETES_MODE=incluster`, assign `serviceAccountName: aiops-agent`,
 and explicitly set `automountServiceAccountToken: true` on the backend Pod (or
@@ -189,7 +192,7 @@ Offline verification:
 ```bash
 uv run --locked python -m unittest tests.test_kubernetes_credentials -v
 uv run --locked python -m unittest tests.test_auth tests.test_agent_workflow tests.test_backend -v
-RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s tests/diagnostic_service -v
+RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s tests/collectors -v
 ```
 
 Local restricted credentials are a bearer secret: protect the file and renew it.

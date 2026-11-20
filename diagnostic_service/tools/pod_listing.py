@@ -1,7 +1,7 @@
 """Bounded, read-only discovery of Pods in one namespace."""
 
-from evidence_common import PodEvidenceError, collection_error, validate_namespace
-from kubernetes_client import API_ERRORS, REQUEST_TIMEOUT, kubernetes_clients
+from diagnostic_service.evidence_common import PodEvidenceError, collection_error, validate_namespace
+from diagnostic_service.kubernetes_client import API_ERRORS, REQUEST_TIMEOUT, kubernetes_clients
 
 POD_PAGE_SIZE = 50
 MAX_PODS = 100

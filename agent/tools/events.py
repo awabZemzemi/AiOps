@@ -5,7 +5,7 @@ from agent.authorization import AuthorizationContext
 from langchain_core.messages import ToolMessage
 
 from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, require_tool_namespace
-from tools.kubernetes_events import collect_kubernetes_events
+from diagnostic_service.tools.kubernetes_events import collect_kubernetes_events
 
 
 @tool

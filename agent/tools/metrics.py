@@ -5,8 +5,8 @@ from agent.authorization import AuthorizationContext
 from langchain_core.messages import ToolMessage
 
 from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, require_tool_namespace
-from models import MAX_TEXT_CHARS, text
-from tools.resource_metrics import collect_resource_metrics
+from diagnostic_service.models import MAX_TEXT_CHARS, text
+from diagnostic_service.tools.resource_metrics import collect_resource_metrics
 
 MAX_METRIC_CONTAINERS = 100
 

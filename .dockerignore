@@ -7,8 +7,8 @@
 !backend/**
 !agent/
 !agent/**
-!diagnostic-service/
-!diagnostic-service/**
+!diagnostic_service/
+!diagnostic_service/**
 !migrations/
 !migrations/**
 **/__pycache__/

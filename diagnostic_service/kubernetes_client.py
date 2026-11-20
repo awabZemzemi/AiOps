@@ -8,7 +8,7 @@ from kubernetes.client.exceptions import ApiException
 from kubernetes.config.config_exception import ConfigException
 from urllib3.exceptions import HTTPError
 
-from evidence_common import PodEvidenceError
+from diagnostic_service.evidence_common import PodEvidenceError
 
 REQUEST_TIMEOUT = (3, 10)
 API_ERRORS = (ApiException, HTTPError, OSError)

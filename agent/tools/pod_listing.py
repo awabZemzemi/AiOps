@@ -5,7 +5,7 @@ from agent.authorization import AuthorizationContext
 from langchain_core.messages import ToolMessage
 
 from ._common import COLLECTOR_ERRORS, collector_failure, observation_message, require_tool_namespace
-from tools.pod_listing import list_pods as collect_pods
+from diagnostic_service.tools.pod_listing import list_pods as collect_pods
 
 
 @tool

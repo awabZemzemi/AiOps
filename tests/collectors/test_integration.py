@@ -5,8 +5,7 @@ from pathlib import Path
 import sys
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "diagnostic-service"))
-from diagnostics import collect_pod_evidence
+from diagnostic_service.diagnostics import collect_pod_evidence
 
 
 @unittest.skipUnless(os.environ.get("RUN_K8S_INTEGRATION") == "1", "Set RUN_K8S_INTEGRATION=1 to query the cluster")

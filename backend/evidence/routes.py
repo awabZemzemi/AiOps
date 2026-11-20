@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from backend.auth.dependencies import namespace_access
 
-from diagnostics import DEFAULT_LOG_LINES, MAX_LOG_LINES, PodEvidenceError, collect_pod_evidence
+from diagnostic_service.diagnostics import DEFAULT_LOG_LINES, MAX_LOG_LINES, PodEvidenceError, collect_pod_evidence
 
 router = APIRouter()
 # Reuse Uvicorn's configured handler/level without changing global logging configuration.

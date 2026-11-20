@@ -257,7 +257,7 @@ class AuthTests(unittest.TestCase):
 
     def test_namespace_permissions_apply_to_both_roles_and_direct_evidence(self):
         _, operator_headers = self.seed_operator()
-        with patch("api.collect_pod_evidence", return_value={"collection_errors": []}) as collector:
+        with patch("backend.evidence.routes.collect_pod_evidence", return_value={"collection_errors": []}) as collector:
             for headers in [self.headers, operator_headers]:
                 self.assertEqual(self.client.get("/api/v1/pods/aiops/demo/evidence", headers=headers).status_code, 200)
                 self.assertEqual(self.client.get("/api/v1/pods/forbidden/demo/evidence", headers=headers).status_code, 403)

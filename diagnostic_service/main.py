@@ -3,7 +3,7 @@ import argparse
 import json
 import sys
 
-from diagnostics import PodEvidenceError, collect_pod_evidence
+from diagnostic_service.diagnostics import PodEvidenceError, collect_pod_evidence
 
 
 def main():

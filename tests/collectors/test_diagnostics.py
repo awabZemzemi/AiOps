@@ -5,12 +5,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import Mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "diagnostic-service"))
 from kubernetes import client
 from kubernetes.client.exceptions import ApiException
 from urllib3.exceptions import ReadTimeoutError
 
-from diagnostics import MAX_EVENTS, MAX_LOG_BYTES, PodEvidenceError, collect_pod_evidence
+from diagnostic_service.diagnostics import MAX_EVENTS, MAX_LOG_BYTES, PodEvidenceError, collect_pod_evidence
 
 NOW = datetime(2026, 10, 17, tzinfo=timezone.utc)
 

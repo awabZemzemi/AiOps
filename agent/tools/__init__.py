@@ -1,15 +1,6 @@
 """LangChain tools backed by the existing diagnostic collectors."""
 
-from pathlib import Path
-import sys
-
 from langchain_core.tools import BaseTool
-
-# The standalone service uses flat imports. Set up access once for all adapters
-# without repackaging the service or coupling adapters to an import in pod_info.
-_DIAGNOSTIC_SERVICE = str(Path(__file__).resolve().parents[2] / "diagnostic-service")
-if _DIAGNOSTIC_SERVICE not in sys.path:
-    sys.path.insert(0, _DIAGNOSTIC_SERVICE)
 
 from .pod_info import get_pod_info
 from .logs import get_logs

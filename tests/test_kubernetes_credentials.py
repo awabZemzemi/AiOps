@@ -7,14 +7,13 @@ import unittest
 from unittest.mock import Mock, patch
 
 import yaml
-from agent.tools import get_tools  # Enable standalone collector imports.
 from kubernetes import client
 from kubernetes.client.exceptions import ApiException
 from kubernetes.config.config_exception import ConfigException
-import kubernetes_client as factory
-from evidence_common import PodEvidenceError
+from diagnostic_service import kubernetes_client as factory
+from diagnostic_service.evidence_common import PodEvidenceError
 from scripts.create_agent_kubeconfig import create
-from tools.pod_information import collect_pod_information
+from diagnostic_service.tools.pod_information import collect_pod_information
 
 ROOT = Path(__file__).resolve().parents[1]
 

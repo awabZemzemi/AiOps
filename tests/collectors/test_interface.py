@@ -6,10 +6,9 @@ import sys
 import unittest
 from unittest.mock import Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "diagnostic-service"))
-import kubernetes_client
-import main
-from diagnostics import PodEvidenceError
+from diagnostic_service import kubernetes_client
+from diagnostic_service import main
+from diagnostic_service.diagnostics import PodEvidenceError
 
 
 class InterfaceTests(unittest.TestCase):
