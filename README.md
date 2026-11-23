@@ -16,6 +16,7 @@ for healthy and intentionally failing workloads. No remediation is implemented.
 | Deploy/remove SentinelShop and crash-demo | [Test Lab](deploy/test-lab/README.md) |
 | Create a new local Kind cluster | [Kind infrastructure](infra/kind/README.md) |
 | Use collectors directly or inspect evidence contracts | [Collector reference](diagnostic_service/README.md) |
+| Run one bounded diagnostic incident manually | [AiOps Benchmark v1](benchmark/README.md) |
 | Run the SentinelShop Docker Compose lab | [Test application](app/README.md) |
 
 The AIOps and Test Lab Helm releases are independent. Installing a chart is a
@@ -32,6 +33,7 @@ backend/                       # FastAPI, identities, evidence and investigation
   evidence/                    # Direct evidence HTTP router
   investigations/              # Agent HTTP router, schemas and telemetry
 diagnostic_service/            # Importable read-only collectors and CLI; no HTTP dependency
+benchmark/                     # Manual, resource-constrained incident benchmark
 app/                           # SentinelShop source, Dockerfiles and Compose configuration
 tests/                         # All automated tests; explicit manual integration runner
   collectors/                  # Collector, CLI and evidence API tests

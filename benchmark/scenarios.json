@@ -1,0 +1,2019 @@
+[
+  {
+    "id": "INC-001",
+    "title": "Container exits nonzero",
+    "category": "startup",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "A container process exits 42 immediately; kubelet backs it off.",
+    "prompt": "A service keeps restarting shortly after startup.",
+    "ground_truth": "A container process exits 42 immediately; kubelet backs it off.",
+    "evidence": [
+      "Previous termination exit 42",
+      "CrashLoopBackOff",
+      "BackOff event."
+    ],
+    "recovery": "Fix the process start command after inspecting logs.",
+    "success": "Identify api Pod and this mechanism: A container process exits 42 immediately; kubelet backs it off. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Image pull and node scheduling failures; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "exit",
+      "change": "A container process exits 42 immediately; kubelet backs it off."
+    },
+    "verify": {
+      "kind": "exit",
+      "expected": [
+        "Previous termination exit 42",
+        "CrashLoopBackOff",
+        "BackOff event."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_logs",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Image pull and node scheduling failures",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-002",
+    "title": "Invalid image reference",
+    "category": "startup",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "The image reference points to a closed local registry endpoint; kubelet cannot pull it.",
+    "prompt": "The workload never starts after a new deployment.",
+    "ground_truth": "The image reference points to a closed local registry endpoint; kubelet cannot pull it.",
+    "evidence": [
+      "ErrImagePull or ImagePullBackOff",
+      "Failed event names image."
+    ],
+    "recovery": "Restore an available image reference.",
+    "success": "Identify api Pod and this mechanism: The image reference points to a closed local registry endpoint; kubelet cannot pull it. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Image pull and node scheduling failures; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "image",
+      "change": "The image reference points to a closed local registry endpoint; kubelet cannot pull it."
+    },
+    "verify": {
+      "kind": "image",
+      "expected": [
+        "ErrImagePull or ImagePullBackOff",
+        "Failed event names image."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Image pull and node scheduling failures",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-003",
+    "title": "Missing Secret",
+    "category": "startup",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "A required Secret key reference is absent; kubelet cannot create container config.",
+    "prompt": "The workload is stuck before its application starts.",
+    "ground_truth": "A required Secret key reference is absent; kubelet cannot create container config.",
+    "evidence": [
+      "CreateContainerConfigError",
+      "Failed event names missing Secret."
+    ],
+    "recovery": "Supply the expected Secret through approved secret management.",
+    "success": "Identify api Pod and this mechanism: A required Secret key reference is absent; kubelet cannot create container config. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Image pull and node scheduling failures; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "secret",
+      "change": "A required Secret key reference is absent; kubelet cannot create container config."
+    },
+    "verify": {
+      "kind": "secret",
+      "expected": [
+        "CreateContainerConfigError",
+        "Failed event names missing Secret."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Image pull and node scheduling failures",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-004",
+    "title": "Missing ConfigMap",
+    "category": "startup",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "A required ConfigMap reference is absent; kubelet cannot form the container environment.",
+    "prompt": "The workload has no running application process.",
+    "ground_truth": "A required ConfigMap reference is absent; kubelet cannot form the container environment.",
+    "evidence": [
+      "CreateContainerConfigError",
+      "Failed event names ConfigMap."
+    ],
+    "recovery": "Restore the ConfigMap or correct its reference.",
+    "success": "Identify api Pod and this mechanism: A required ConfigMap reference is absent; kubelet cannot form the container environment. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Image pull and node scheduling failures; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "configmap",
+      "change": "A required ConfigMap reference is absent; kubelet cannot form the container environment."
+    },
+    "verify": {
+      "kind": "configmap",
+      "expected": [
+        "CreateContainerConfigError",
+        "Failed event names ConfigMap."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Image pull and node scheduling failures",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-005",
+    "title": "Invalid application environment",
+    "category": "startup",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "An invalid port value fails application configuration validation.",
+    "prompt": "The application starts and then repeatedly exits.",
+    "ground_truth": "An invalid port value fails application configuration validation.",
+    "evidence": [
+      "Nonzero previous exit",
+      "bounded log states invalid port."
+    ],
+    "recovery": "Correct the configured port value.",
+    "success": "Identify api Pod and this mechanism: An invalid port value fails application configuration validation. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Image pull and node scheduling failures; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "env",
+      "change": "An invalid port value fails application configuration validation."
+    },
+    "verify": {
+      "kind": "env",
+      "expected": [
+        "Nonzero previous exit",
+        "bounded log states invalid port."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_logs",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Image pull and node scheduling failures",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-006",
+    "title": "Liveness endpoint mismatch",
+    "category": "startup",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "The liveness probe targets a nonexistent path and kubelet restarts the container.",
+    "prompt": "The service intermittently restarts despite a working main endpoint.",
+    "ground_truth": "The liveness probe targets a nonexistent path and kubelet restarts the container.",
+    "evidence": [
+      "Unhealthy event and repeated restarts",
+      "probe path in Pod info."
+    ],
+    "recovery": "Correct the liveness HTTP path.",
+    "success": "Identify api Pod and this mechanism: The liveness probe targets a nonexistent path and kubelet restarts the container. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Image pull and node scheduling failures; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "liveness",
+      "change": "The liveness probe targets a nonexistent path and kubelet restarts the container."
+    },
+    "verify": {
+      "kind": "liveness",
+      "expected": [
+        "Unhealthy event and repeated restarts",
+        "probe path in Pod info."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Image pull and node scheduling failures",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-007",
+    "title": "Readiness endpoint mismatch",
+    "category": "startup",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "The readiness probe targets a nonexistent path; Pod remains unready.",
+    "prompt": "The application process is running but unavailable to clients.",
+    "ground_truth": "The readiness probe targets a nonexistent path; Pod remains unready.",
+    "evidence": [
+      "Running container, Ready false, Unhealthy event and probe path."
+    ],
+    "recovery": "Correct readiness probe path.",
+    "success": "Identify api Pod and this mechanism: The readiness probe targets a nonexistent path; Pod remains unready. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Image pull and node scheduling failures; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "readiness",
+      "change": "The readiness probe targets a nonexistent path; Pod remains unready."
+    },
+    "verify": {
+      "kind": "readiness",
+      "expected": [
+        "Running container, Ready false, Unhealthy event and probe path."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Image pull and node scheduling failures",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-008",
+    "title": "Impossible node selector",
+    "category": "scheduling",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "A node selector requires a label absent from local nodes.",
+    "prompt": "The application is pending and has never served a request.",
+    "ground_truth": "A node selector requires a label absent from local nodes.",
+    "evidence": [
+      "Pending Pod",
+      "FailedScheduling event mentions node selector."
+    ],
+    "recovery": "Use a real node label or remove the requirement.",
+    "success": "Identify api Pod and this mechanism: A node selector requires a label absent from local nodes. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Node not Ready; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "node_selector",
+      "change": "A node selector requires a label absent from local nodes."
+    },
+    "verify": {
+      "kind": "node_selector",
+      "expected": [
+        "Pending Pod",
+        "FailedScheduling event mentions node selector."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Node not Ready",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-009",
+    "title": "Impossible required affinity",
+    "category": "scheduling",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "Required node affinity demands a nonexistent label value.",
+    "prompt": "The application remains pending after creation.",
+    "ground_truth": "Required node affinity demands a nonexistent label value.",
+    "evidence": [
+      "Pending Pod",
+      "FailedScheduling event cites affinity or selector."
+    ],
+    "recovery": "Correct required node affinity.",
+    "success": "Identify api Pod and this mechanism: Required node affinity demands a nonexistent label value. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Node not Ready; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "affinity",
+      "change": "Required node affinity demands a nonexistent label value."
+    },
+    "verify": {
+      "kind": "affinity",
+      "expected": [
+        "Pending Pod",
+        "FailedScheduling event cites affinity or selector."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Node not Ready",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-010",
+    "title": "Bounded memory OOM",
+    "category": "resource",
+    "difficulty": "easy",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "A capped 96 MiB allocation exceeds a 64 MiB container memory limit.",
+    "prompt": "The application repeatedly restarts during startup.",
+    "ground_truth": "A capped 96 MiB allocation exceeds a 64 MiB container memory limit.",
+    "evidence": [
+      "Last termination OOMKilled",
+      "memory limit 64Mi."
+    ],
+    "recovery": "Set an appropriate limit or reduce bounded startup memory use.",
+    "success": "Identify api Pod and this mechanism: A capped 96 MiB allocation exceeds a 64 MiB container memory limit. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 64
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "oom",
+      "change": "A capped 96 MiB allocation exceeds a 64 MiB container memory limit."
+    },
+    "verify": {
+      "kind": "oom",
+      "expected": [
+        "Last termination OOMKilled",
+        "memory limit 64Mi."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": false,
+    "capability_note": "",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-011",
+    "title": "Service selector drift",
+    "category": "network",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "Service selector does not match the healthy Pod labels; no usable EndpointSlice addresses.",
+    "prompt": "Requests through the application Service fail while its Pod is running.",
+    "ground_truth": "Service selector does not match the healthy Pod labels; no usable EndpointSlice addresses.",
+    "evidence": [
+      "Healthy Pod plus Service selector and empty EndpointSlice."
+    ],
+    "recovery": "Repair the Service selector to match intended Pods.",
+    "success": "Identify api Pod and api Service and this mechanism: Service selector does not match the healthy Pod labels; no usable EndpointSlice addresses. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Application process crash; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "selector",
+      "change": "Service selector does not match the healthy Pod labels; no usable EndpointSlice addresses."
+    },
+    "verify": {
+      "kind": "selector",
+      "expected": [
+        "Healthy Pod plus Service selector and empty EndpointSlice."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "list_pods",
+      "get_pod_info",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api Pod and api Service",
+    "alternatives_to_exclude": [
+      "Application process crash",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-012",
+    "title": "Service target port mismatch",
+    "category": "network",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "Service targetPort points to 8081 while the process listens on 8080.",
+    "prompt": "Clients cannot reach the application Service, though the Pod is ready.",
+    "ground_truth": "Service targetPort points to 8081 while the process listens on 8080.",
+    "evidence": [
+      "Ready Pod, Service targetPort 8081, refused client connection."
+    ],
+    "recovery": "Set targetPort to the actual listener port.",
+    "success": "Identify api Pod and api Service and this mechanism: Service targetPort points to 8081 while the process listens on 8080. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Application process crash; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "target_port",
+      "change": "Service targetPort points to 8081 while the process listens on 8080."
+    },
+    "verify": {
+      "kind": "target_port",
+      "expected": [
+        "Ready Pod, Service targetPort 8081, refused client connection."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "list_pods",
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api Pod and api Service",
+    "alternatives_to_exclude": [
+      "Application process crash",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-013",
+    "title": "Unknown dependency Service",
+    "category": "network",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "The configured upstream DNS name has no corresponding Service.",
+    "prompt": "The API reports an upstream error during requests.",
+    "ground_truth": "The configured upstream DNS name has no corresponding Service.",
+    "evidence": [
+      "API log reports DNS resolution failure",
+      "no matching Service."
+    ],
+    "recovery": "Correct dependency Service name or restore it.",
+    "success": "Identify api Pod and this mechanism: The configured upstream DNS name has no corresponding Service. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Application process crash; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "dns",
+      "change": "The configured upstream DNS name has no corresponding Service."
+    },
+    "verify": {
+      "kind": "dns",
+      "expected": [
+        "API log reports DNS resolution failure",
+        "no matching Service."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Application process crash",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-014",
+    "title": "Unavailable upstream",
+    "category": "network",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "The upstream Pod exits; Service has no ready endpoints.",
+    "prompt": "The API reports upstream failures while its own Pod is ready.",
+    "ground_truth": "The upstream Pod exits; Service has no ready endpoints.",
+    "evidence": [
+      "API upstream error",
+      "upstream restart and service endpoint absence."
+    ],
+    "recovery": "Restore the upstream workload.",
+    "success": "Identify api and worker Pods and this mechanism: The upstream Pod exits; Service has no ready endpoints. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Application process crash; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 2,
+      "cpu_request_m": 100,
+      "cpu_limit_m": 400,
+      "memory_request_mi": 128,
+      "memory_limit_mi": 256
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "upstream",
+      "change": "The upstream Pod exits; Service has no ready endpoints."
+    },
+    "verify": {
+      "kind": "upstream",
+      "expected": [
+        "API upstream error",
+        "upstream restart and service endpoint absence."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "list_pods",
+      "get_pod_info",
+      "get_logs",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api and worker Pods",
+    "alternatives_to_exclude": [
+      "Application process crash",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-015",
+    "title": "Read-only write path",
+    "category": "storage",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "A readOnlyRootFilesystem prevents writing under the expected path.",
+    "prompt": "The API starts, but requests requiring a local write return errors.",
+    "ground_truth": "A readOnlyRootFilesystem prevents writing under the expected path.",
+    "evidence": [
+      "API logs permission or read-only filesystem error",
+      "Pod remains Ready."
+    ],
+    "recovery": "Use a bounded writable volume for the intended path.",
+    "success": "Identify api Pod and this mechanism: A readOnlyRootFilesystem prevents writing under the expected path. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "readonly",
+      "change": "A readOnlyRootFilesystem prevents writing under the expected path."
+    },
+    "verify": {
+      "kind": "readonly",
+      "expected": [
+        "API logs permission or read-only filesystem error",
+        "Pod remains Ready."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-016",
+    "title": "Missing response template",
+    "category": "configuration",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "A required template file is absent from the mounted configuration.",
+    "prompt": "The API remains ready, but its functional route returns HTTP 500.",
+    "ground_truth": "A required template file is absent from the mounted configuration.",
+    "evidence": [
+      "Ready Pod",
+      "request produces 500 and missing file log."
+    ],
+    "recovery": "Restore the mounted template file or correct its path.",
+    "success": "Identify api Pod and this mechanism: A required template file is absent from the mounted configuration. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "http500",
+      "change": "A required template file is absent from the mounted configuration."
+    },
+    "verify": {
+      "kind": "http500",
+      "expected": [
+        "Ready Pod",
+        "request produces 500 and missing file log."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-017",
+    "title": "Bounded slow computation",
+    "category": "application",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "The route performs a bounded inefficient computation set by configuration.",
+    "prompt": "Users report slow responses from an otherwise healthy API.",
+    "ground_truth": "The route performs a bounded inefficient computation set by configuration.",
+    "evidence": [
+      "Ready Pod",
+      "functional request duration exceeds threshold",
+      "logs show iteration count."
+    ],
+    "recovery": "Reduce work per request or use appropriate caching.",
+    "success": "Identify api Pod and this mechanism: The route performs a bounded inefficient computation set by configuration. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "slow",
+      "change": "The route performs a bounded inefficient computation set by configuration."
+    },
+    "verify": {
+      "kind": "slow",
+      "expected": [
+        "Ready Pod",
+        "functional request duration exceeds threshold",
+        "logs show iteration count."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_logs",
+      "get_metrics"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-018",
+    "title": "Dependency timeout",
+    "category": "application",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "Upstream intentionally waits 2 seconds while client timeout is 0.2 seconds.",
+    "prompt": "API requests fail after waiting for a dependency.",
+    "ground_truth": "Upstream intentionally waits 2 seconds while client timeout is 0.2 seconds.",
+    "evidence": [
+      "Ready Pods",
+      "API timeout log and bounded response duration."
+    ],
+    "recovery": "Align client timeout with dependency latency or reduce upstream work.",
+    "success": "Identify api and worker Pods and this mechanism: Upstream intentionally waits 2 seconds while client timeout is 0.2 seconds. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 2,
+      "cpu_request_m": 100,
+      "cpu_limit_m": 400,
+      "memory_request_mi": 128,
+      "memory_limit_mi": 256
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "timeout",
+      "change": "Upstream intentionally waits 2 seconds while client timeout is 0.2 seconds."
+    },
+    "verify": {
+      "kind": "timeout",
+      "expected": [
+        "Ready Pods",
+        "API timeout log and bounded response duration."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "list_pods",
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api and worker Pods",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-019",
+    "title": "Faulty rollout revision",
+    "category": "application",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "A new Deployment revision references a missing configuration file.",
+    "prompt": "Users report errors after a rollout.",
+    "ground_truth": "A new Deployment revision references a missing configuration file.",
+    "evidence": [
+      "Deployment and ReplicaSet revision plus failing new Pod."
+    ],
+    "recovery": "Roll back or correct the new revision.",
+    "success": "Identify Not instantiated in v1 and this mechanism: A new Deployment revision references a missing configuration file. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: Deployment rollout fixture and revision evidence are not implemented; current agent lacks Deployment and ReplicaSet inspection.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "Deployment rollout fixture and revision evidence are not implemented; current agent lacks Deployment and ReplicaSet inspection."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "Deployment rollout fixture and revision evidence are not implemented; current agent lacks Deployment and ReplicaSet inspection."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "Deployment rollout fixture and revision evidence are not implemented; current agent lacks Deployment and ReplicaSet inspection.",
+    "agent_tools": [
+      "list_pods",
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-020",
+    "title": "Namespace quota blocks scale",
+    "category": "resource",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "ResourceQuota rejects new Pods after a scale request.",
+    "prompt": "A workload cannot reach its desired replica count.",
+    "ground_truth": "ResourceQuota rejects new Pods after a scale request.",
+    "evidence": [
+      "Deployment replica shortfall and FailedCreate event with quota."
+    ],
+    "recovery": "Reduce desired replicas or adjust quota after capacity review.",
+    "success": "Identify Not instantiated in v1 and this mechanism: ResourceQuota rejects new Pods after a scale request. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: Scaling needs Deployment state and quota events; no safe scale fixture implemented.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "Scaling needs Deployment state and quota events; no safe scale fixture implemented."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "Scaling needs Deployment state and quota events; no safe scale fixture implemented."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "Scaling needs Deployment state and quota events; no safe scale fixture implemented.",
+    "agent_tools": [
+      "list_pods",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-021",
+    "title": "CPU throttling latency",
+    "category": "resource",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "A restrictive CPU limit throttles a bounded workload.",
+    "prompt": "Requests become slow at higher traffic.",
+    "ground_truth": "A restrictive CPU limit throttles a bounded workload.",
+    "evidence": [
+      "CPU throttling counters and latency correlation."
+    ],
+    "recovery": "Raise CPU limit after capacity review or optimize work.",
+    "success": "Identify Not instantiated in v1 and this mechanism: A restrictive CPU limit throttles a bounded workload. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: CPU metrics tool lacks throttling counters; metrics-server CPU usage cannot prove throttling.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "CPU metrics tool lacks throttling counters; metrics-server CPU usage cannot prove throttling."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "CPU metrics tool lacks throttling counters; metrics-server CPU usage cannot prove throttling."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "CPU metrics tool lacks throttling counters; metrics-server CPU usage cannot prove throttling.",
+    "agent_tools": [
+      "get_metrics",
+      "get_pod_info"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-022",
+    "title": "Policy blocks API traffic",
+    "category": "network",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "A namespace NetworkPolicy denies API egress to the dependency.",
+    "prompt": "API requests fail to reach a ready dependency.",
+    "ground_truth": "A namespace NetworkPolicy denies API egress to the dependency.",
+    "evidence": [
+      "Policy selectors and connection timeout",
+      "CNI enforces policy."
+    ],
+    "recovery": "Restore the intended allow rule.",
+    "success": "Identify Not instantiated in v1 and this mechanism: A namespace NetworkPolicy denies API egress to the dependency. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Application process crash; Unrelated existing aiops namespace workloads), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: Local CNI policy enforcement has not been established; fault must not be activated.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "Local CNI policy enforcement has not been established; fault must not be activated."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "Local CNI policy enforcement has not been established; fault must not be activated."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "Local CNI policy enforcement has not been established; fault must not be activated.",
+    "agent_tools": [
+      "list_pods",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Application process crash",
+      "Unrelated existing aiops namespace workloads"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-023",
+    "title": "Invalid StorageClass PVC",
+    "category": "storage",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "PVC requests a nonexistent StorageClass.",
+    "prompt": "A workload waits for storage and never becomes available.",
+    "ground_truth": "PVC requests a nonexistent StorageClass.",
+    "evidence": [
+      "PVC Pending and provisioning events."
+    ],
+    "recovery": "Correct StorageClass and recreate the claim safely.",
+    "success": "Identify Not instantiated in v1 and this mechanism: PVC requests a nonexistent StorageClass. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: PVC/StorageClass inspection is absent from the agent and a safe storage fixture is not implemented.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "PVC/StorageClass inspection is absent from the agent and a safe storage fixture is not implemented."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "PVC/StorageClass inspection is absent from the agent and a safe storage fixture is not implemented."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "PVC/StorageClass inspection is absent from the agent and a safe storage fixture is not implemented.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-024",
+    "title": "Unavailable database dependency",
+    "category": "application",
+    "difficulty": "medium",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "optional-dependency",
+    "status": "unsupported",
+    "mechanism": "A database workload is unavailable.",
+    "prompt": "Order operations fail while the API Pod is healthy.",
+    "ground_truth": "A database workload is unavailable.",
+    "evidence": [
+      "Dependency logs and connection failures."
+    ],
+    "recovery": "Restore database after checking its state.",
+    "success": "Identify Not instantiated in v1 and this mechanism: A database workload is unavailable. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: No dedicated database exists within the light profile.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "No dedicated database exists within the light profile."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "No dedicated database exists within the light profile."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "No dedicated database exists within the light profile.",
+    "agent_tools": [
+      "get_logs",
+      "get_pod_info"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-025",
+    "title": "Healthy objects, broken configuration",
+    "category": "configuration",
+    "difficulty": "hard",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "An application-level configuration defect leaves health route unaffected.",
+    "prompt": "Requests fail although Pods report Ready.",
+    "ground_truth": "An application-level configuration defect leaves health route unaffected.",
+    "evidence": [
+      "Functional error plus config provenance."
+    ],
+    "recovery": "Correct the application configuration.",
+    "success": "Identify Not instantiated in v1 and this mechanism: An application-level configuration defect leaves health route unaffected. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: No live fixture yet distinguishes configuration failure from healthy Kubernetes state.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "No live fixture yet distinguishes configuration failure from healthy Kubernetes state."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "No live fixture yet distinguishes configuration failure from healthy Kubernetes state."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "No live fixture yet distinguishes configuration failure from healthy Kubernetes state.",
+    "agent_tools": [
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-026",
+    "title": "Competing simultaneous faults",
+    "category": "reasoning",
+    "difficulty": "hard",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "One fault affects the reported path; a second unrelated fault is present.",
+    "prompt": "A single customer path fails while several warnings exist.",
+    "ground_truth": "One fault affects the reported path; a second unrelated fault is present.",
+    "evidence": [
+      "Causal path evidence distinguishes primary and incidental fault."
+    ],
+    "recovery": "Repair the causal fault first.",
+    "success": "Identify Not instantiated in v1 and this mechanism: One fault affects the reported path; a second unrelated fault is present. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: A dual-fault fixture would need causal functional traces and validated resource estimates.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "A dual-fault fixture would need causal functional traces and validated resource estimates."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "A dual-fault fixture would need causal functional traces and validated resource estimates."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "A dual-fault fixture would need causal functional traces and validated resource estimates.",
+    "agent_tools": [
+      "list_pods",
+      "get_logs",
+      "get_events"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-027",
+    "title": "Distracting failed Pod",
+    "category": "reasoning",
+    "difficulty": "hard",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "An unrelated failing workload is noise; actual cause lies on API path.",
+    "prompt": "An API request fails while an unrelated Pod also crashes.",
+    "ground_truth": "An unrelated failing workload is noise; actual cause lies on API path.",
+    "evidence": [
+      "Separate workload and API traces identify causality."
+    ],
+    "recovery": "Address the API path; do not conflate the unrelated Pod.",
+    "success": "Identify Not instantiated in v1 and this mechanism: An unrelated failing workload is noise; actual cause lies on API path. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: A distractor fixture would need a validated primary failure path.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "A distractor fixture would need a validated primary failure path."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "A distractor fixture would need a validated primary failure path."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "A distractor fixture would need a validated primary failure path.",
+    "agent_tools": [
+      "list_pods",
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-028",
+    "title": "Healthy control",
+    "category": "control",
+    "difficulty": "hard",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "live-light",
+    "status": "implemented-unverified",
+    "mechanism": "All benchmark workload health and functional checks pass.",
+    "prompt": "Please check whether the API is healthy; no outage has been reported.",
+    "ground_truth": "All benchmark workload health and functional checks pass.",
+    "evidence": [
+      "Ready Pod and successful functional response."
+    ],
+    "recovery": "State that no incident is established.",
+    "success": "Identify api Pod and this mechanism: All benchmark workload health and functional checks pass. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [
+        "core/v1 Pods",
+        "core/v1 Events"
+      ],
+      "dependencies": [
+        "python:3.12-alpine image"
+      ]
+    },
+    "footprint": {
+      "pods": 1,
+      "cpu_request_m": 50,
+      "cpu_limit_m": 200,
+      "memory_request_mi": 64,
+      "memory_limit_mi": 128
+    },
+    "safety": "light",
+    "setup": "Create only named benchmark objects in aiops-bench after local Kind preflight.",
+    "baseline": "No active benchmark marker and no unowned workload in the namespace.",
+    "fault": {
+      "kind": "healthy",
+      "change": "All benchmark workload health and functional checks pass."
+    },
+    "verify": {
+      "kind": "healthy",
+      "expected": [
+        "Ready Pod and successful functional response."
+      ]
+    },
+    "cleanup": "Delete only UID-checked benchmark-owned objects listed in the active marker.",
+    "restoration": "No benchmark-owned workload remains; quota and namespace may persist.",
+    "timeout_seconds": 900,
+    "failure_handling": "Abort on failed preflight or server dry-run; roll back partially created owned resources. Pod activeDeadlineSeconds is 900; marker remains until explicit cleanup.",
+    "agent_tools": [
+      "list_pods",
+      "get_pod_info",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "api Pod",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-029",
+    "title": "Insufficient evidence",
+    "category": "control",
+    "difficulty": "hard",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "unsupported",
+    "status": "unsupported",
+    "mechanism": "The available snapshot lacks evidence to determine a cause.",
+    "prompt": "An intermittent error was reported without a time or affected component.",
+    "ground_truth": "The available snapshot lacks evidence to determine a cause.",
+    "evidence": [
+      "No decisive event or log",
+      "competing hypotheses remain."
+    ],
+    "recovery": "Request a time window and affected path; acknowledge uncertainty.",
+    "success": "Identify Not instantiated in v1 and this mechanism: The available snapshot lacks evidence to determine a cause. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: No genuine redacted source snapshot has been captured.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "No genuine redacted source snapshot has been captured."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "No genuine redacted source snapshot has been captured."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "No genuine redacted source snapshot has been captured.",
+    "agent_tools": [
+      "list_pods",
+      "get_events",
+      "get_logs"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  },
+  {
+    "id": "INC-030",
+    "title": "Cloud-OpsBench replay candidate",
+    "category": "replay",
+    "difficulty": "hard",
+    "provenance": {
+      "type": "original",
+      "source": "AiOps Benchmark v1",
+      "source_case": null,
+      "license": "repository license"
+    },
+    "mode": "snapshot-replay",
+    "status": "unsupported",
+    "mechanism": "External case not selected or integrated; no evidence can be served yet.",
+    "prompt": "Investigate the selected recorded incident.",
+    "ground_truth": "External case not selected or integrated; no evidence can be served yet.",
+    "evidence": [
+      "Requires original snapshot and compatible tool cache."
+    ],
+    "recovery": "No recovery claim until a case is imported and mapped.",
+    "success": "Identify Not instantiated in v1 and this mechanism: External case not selected or integrated; no evidence can be served yet. Cite at least one expected observation; state any tool limitation.",
+    "failure": "Conclude one of the alternatives without evidence (Unrelated existing aiops namespace workloads; A different fault with the same symptom), invent a signal, or recommend an unsafe action.",
+    "requirements": {
+      "kubernetes": [],
+      "dependencies": []
+    },
+    "footprint": {
+      "pods": 0,
+      "cpu_request_m": 0,
+      "cpu_limit_m": 0,
+      "memory_request_mi": 0,
+      "memory_limit_mi": 0
+    },
+    "safety": "unsupported-in-light-profile",
+    "setup": "Unavailable: Cloud-OpsBench uses different tool contracts; no selected case or deterministic adapter is integrated.",
+    "baseline": "No baseline fixture implemented.",
+    "fault": {
+      "kind": "unsupported",
+      "reason": "Cloud-OpsBench uses different tool contracts; no selected case or deterministic adapter is integrated."
+    },
+    "verify": {
+      "kind": "unsupported",
+      "reason": "Cloud-OpsBench uses different tool contracts; no selected case or deterministic adapter is integrated."
+    },
+    "cleanup": "No resources created.",
+    "restoration": "No cluster change.",
+    "timeout_seconds": 0,
+    "failure_handling": "Cloud-OpsBench uses different tool contracts; no selected case or deterministic adapter is integrated.",
+    "agent_tools": [
+      "list_pods",
+      "get_pod_info",
+      "get_logs",
+      "get_events",
+      "get_metrics"
+    ],
+    "blocked_by_agent_capability": true,
+    "capability_note": "Current agent cannot inspect Services, EndpointSlices, Deployments, PVCs, NetworkPolicies or functional HTTP responses; grade only supported observations.",
+    "affected_component": "Not instantiated in v1",
+    "alternatives_to_exclude": [
+      "Unrelated existing aiops namespace workloads",
+      "A different fault with the same symptom"
+    ],
+    "validation": null
+  }
+]
