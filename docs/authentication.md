@@ -150,8 +150,8 @@ Unknown or disabled tokens return `401` with `WWW-Authenticate: Bearer`.
 
 Public user schemas allowlist fields; hashes are never serialized. Validation
 errors omit input values and exception context, so malformed password requests
-cannot echo credentials. SQLAlchemy disables SQL parameter rendering. Known
-environment secrets, JWTs and Argon2 hashes are redacted from investigation logs.
+cannot echo credentials. SQLAlchemy disables SQL parameter rendering. The
+investigation log records only operational metadata.
 
 Login limits are five attempts per username and twenty per peer IP in a rolling
 five-minute window. Both successful and failed attempts count; `429` includes
@@ -217,9 +217,9 @@ Other deployment work remains:
   investigation admission/resource controls for expensive model/cluster calls.
 - Permissions are a per-request snapshot. Already running investigations finish
   under their initial context; account disablement blocks subsequent requests.
-- Protect diagnostic evidence sent to the configured external model provider.
-  Kubernetes logs may contain arbitrary application data; existing bounded
-  collection and redaction do not guarantee removal of all workload secrets.
+- External model requests carry sanitized prompts and minimized evidence.
+  Kubernetes logs can contain arbitrary application data. Pattern-based
+  redaction addresses recognized formats and configured values.
 - `/docs` and `/openapi.json` remain public API descriptions; `/health` returns
   only process status and performs no cluster or model call. Health is served
   after successful configured startup.

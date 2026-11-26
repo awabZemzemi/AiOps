@@ -7,7 +7,7 @@ from agent.authorization import AuthorizationContext
 from langchain_core.messages import ToolMessage
 from pydantic import Field
 
-from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, require_tool_namespace
+from ._common import COLLECTOR_ERRORS, collector_failure, observation_message, require_tool_namespace
 from diagnostic_service.tools.container_logs import DEFAULT_LOG_LINES, MAX_LOG_LINES, collect_container_logs
 
 
@@ -32,6 +32,5 @@ def get_logs(
         evidence = collect_container_logs(namespace, pod_name, container_name, tail_lines=tail_lines)
     except COLLECTOR_ERRORS as error:
         return collector_failure(runtime, "get_logs", namespace, error, pod_name=pod_name)
-    streams = evidence["logs"][container_name]
-    return evidence_message(runtime, "get_logs", namespace, pod_name, evidence,
-                            has_evidence=any(value is not None for value in streams.values()))
+    return observation_message(runtime, "get_logs", namespace, {"evidence": evidence},
+                               pod_name=pod_name, container_name=container_name)

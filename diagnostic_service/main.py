@@ -3,7 +3,8 @@ import argparse
 import json
 import sys
 
-from diagnostic_service.diagnostics import PodEvidenceError, collect_pod_evidence
+from diagnostic_service.diagnostics import collect_pod_evidence
+from diagnostic_service.security import sanitize_evidence
 
 
 def main():
@@ -14,11 +15,16 @@ def main():
     args = parser.parse_args()
     try:
         report = collect_pod_evidence(args.namespace, args.pod, tail_lines=args.tail_lines)
-    except (PodEvidenceError, ValueError):
+        report = sanitize_evidence("pod_report", report, destination="api",
+                                   target={"namespace": args.namespace, "pod_name": args.pod})
+        if report is None:
+            raise ValueError("Unsafe evidence.")
+        output = json.dumps(report, indent=2)
+    except Exception:
         # Do not print raw Kubernetes exception messages or response bodies.
         print("Pod not found or evidence collection unavailable; check the target and kubeconfig.", file=sys.stderr)
         return 1
-    print(json.dumps(report, indent=2))
+    print(output)
     return 0
 
 

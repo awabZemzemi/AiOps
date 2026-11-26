@@ -21,7 +21,11 @@ def timestamp(value):
 
 
 def text(value):
-    return value[:MAX_TEXT_CHARS] if value is not None else None
+    if value is None or len(value) <= MAX_TEXT_CHARS:
+        return value
+    # Preserve complete lines and discard the partial line at the size boundary.
+    complete = value[:MAX_TEXT_CHARS - len("\n[TRUNCATED]")].rpartition("\n")[0]
+    return f"{complete}\n[TRUNCATED]" if complete else "[TRUNCATED]"
 
 
 def state_info(state):

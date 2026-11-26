@@ -23,6 +23,4 @@ def list_pods(namespace: str, runtime: ToolRuntime[AuthorizationContext]) -> Too
         evidence = collect_pods(namespace)
     except COLLECTOR_ERRORS as error:
         return collector_failure(runtime, "list_pods", namespace, error)
-    return observation_message(runtime, "list_pods", namespace, {
-        "status": "partial" if evidence["truncated"] else "listed", "evidence": evidence,
-    })
+    return observation_message(runtime, "list_pods", namespace, {"evidence": evidence})

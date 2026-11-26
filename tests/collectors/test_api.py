@@ -8,21 +8,14 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from tests.auth_support import prepare_auth
+from tests.collectors import evidence_report
 from kubernetes.client.exceptions import ApiException
 
 from backend.evidence import routes as api
 from backend.main import app
 from diagnostic_service.diagnostics import DEFAULT_LOG_LINES, MAX_LOG_LINES, PodEvidenceError
 
-REPORT = {
-    "timestamp": "2026-10-20T10:00:00+00:00",
-    "target": {"namespace": "aiops", "pod": "crash-demo"},
-    "pod": {"name": "crash-demo", "namespace": "aiops", "phase": "Running"},
-    "containers": [{"name": "app", "state": {"state": "Running"}}],
-    "logs": {"app": {"current": "2026-10-20T10:00:00Z started\n", "previous": None}},
-    "events": [], "metrics": {"timestamp": "2026-10-20T10:00:00Z", "window": "15s", "containers": []},
-    "collection_errors": [],
-}
+REPORT = evidence_report(pod_name="crash-demo")
 URL = "/api/v1/pods/aiops/crash-demo/evidence"
 
 
@@ -78,6 +71,7 @@ class ApiTests(unittest.TestCase):
 
     def test_valid_dns_names_are_forwarded(self):
         namespace, pod = "a" * 63, "demo.pod-1"
+        self.collector.return_value = evidence_report(namespace, pod)
         response = self.client.get(f"/api/v1/pods/{namespace}/{pod}/evidence")
         self.assertEqual(response.status_code, 200)
         self.collector.assert_called_once_with(namespace, pod, tail_lines=DEFAULT_LOG_LINES)
@@ -147,8 +141,9 @@ class ApiTests(unittest.TestCase):
             response = self.client.get(URL)
         self.assertEqual(response.status_code, 200)
         output = "\n".join(captured.output)
-        self.assertIn("evidence_started namespace=aiops pod=crash-demo", output)
+        self.assertIn("evidence_started tail_lines=100", output)
         self.assertIn("evidence_completed", output)
+        self.assertNotIn("crash-demo", output)
         self.assertIn("duration_ms=", output)
         self.assertNotIn("secret container log payload", output)
         self.assertTrue(all(record.exc_info is None for record in captured.records))
@@ -160,7 +155,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         output = "\n".join(captured.output)
         self.assertIn("WARNING", output)
-        self.assertIn("evidence_failed namespace=aiops pod=crash-demo http_status=403", output)
+        self.assertIn("evidence_failed http_status=403", output)
         self.assertNotIn("private-kubeconfig-token", output)
         self.assertNotIn("evidence_completed", output)
 
@@ -172,7 +167,7 @@ class ApiTests(unittest.TestCase):
             response = self.client.get(URL)
         self.assertEqual(response.status_code, 200)
         output = "\n".join(captured.output)
-        self.assertIn("evidence_partial namespace=aiops pod=crash-demo error_count=1", output)
+        self.assertIn("evidence_partial error_count=1", output)
         self.assertIn("evidence_completed", output)
         self.assertNotIn("sensitive upstream response", output)
 
@@ -190,6 +185,12 @@ class ApiTests(unittest.TestCase):
         self.assertIn("evidence_unexpected_error", output)
         self.assertNotIn("private-token-in-exception", output)
         self.assertTrue(all(record.exc_info is None for record in captured.records))
+
+    def test_invalid_report_is_withheld(self):
+        self.collector.return_value["pod"]["name"] = "different-pod"
+        response = self.client.get(URL)
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn("different-pod", response.text)
 
 
 if __name__ == "__main__":

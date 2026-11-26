@@ -5,11 +5,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints
 
+from agent.factory.model import MAX_PROMPT_BYTES
 from backend.auth.schemas import Namespace
 
 
 class InvestigateRequest(BaseModel):
-    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=MAX_PROMPT_BYTES)]
     namespace: Namespace | None = None
 
 

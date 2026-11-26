@@ -59,15 +59,19 @@ uv run --locked python -m diagnostic_service crash-demo -n aiops --tail-lines 20
 
 Choose an existing Pod; the Helm-managed lab Pod is normally named
 `sentinelshop-lab-crash-demo`. See the [collector reference](../diagnostic_service/README.md)
-for Python imports, evidence fields and bounds. Running a real investigation sends
-permitted workload evidence to the configured external model; offline tests mock it.
+for Python imports, evidence fields and bounds. Real investigations send sanitized
+prompts and bounded, minimized evidence to the configured external model. The
+direct evidence API and CLI use a richer sanitized report. Target names and useful
+network diagnostics can be retained. Treat diagnostic output as sensitive because
+pattern-based redaction covers recognized formats and configured literals.
 
 ## Logs and dependencies
 
-Private rotating investigation logs default to `logs/backend/`; configure
-`AIOPS_LOG_DIR` for another location. Each stream rotates at 5 MiB with three
-backups. Redaction applies before persistence, not before model submission or
-HTTP answers; treat diagnostic evidence as sensitive.
+The private `operations.jsonl` log defaults to `logs/backend/`. Configure
+`AIOPS_LOG_DIR` for another location. It rotates at 5 MiB with three backups and
+records only investigation metadata. The HTTP investigation path disables payload
+tracing. Historical transcripts and the separate benchmark artifacts require their
+own retention and handling decisions.
 
 `pyproject.toml` and `uv.lock` are the root environment's source of truth. Use
 `uv sync --locked` and `uv pip check`; update the lock through uv rather than

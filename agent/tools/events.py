@@ -4,7 +4,7 @@ from langchain.tools import ToolRuntime, tool
 from agent.authorization import AuthorizationContext
 from langchain_core.messages import ToolMessage
 
-from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, require_tool_namespace
+from ._common import COLLECTOR_ERRORS, collector_failure, observation_message, require_tool_namespace
 from diagnostic_service.tools.kubernetes_events import collect_kubernetes_events
 
 
@@ -24,5 +24,4 @@ def get_events(namespace: str, pod_name: str, runtime: ToolRuntime[Authorization
         evidence = collect_kubernetes_events(namespace, pod_name)
     except COLLECTOR_ERRORS as error:
         return collector_failure(runtime, "get_events", namespace, error, pod_name=pod_name)
-    return evidence_message(runtime, "get_events", namespace, pod_name, evidence,
-                            has_evidence=bool(evidence["events"]))
+    return observation_message(runtime, "get_events", namespace, {"evidence": evidence}, pod_name=pod_name)

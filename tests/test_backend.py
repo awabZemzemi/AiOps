@@ -13,14 +13,15 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 from tests.auth_support import prepare_auth
+from tests.collectors import evidence_report
 from backend.auth.schemas import UserPublic
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, messages_to_dict
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langgraph.errors import GraphRecursionError
 
 from backend.main import app
 from backend.investigations.routes import investigate
 from backend.investigations.schemas import InvestigateRequest, InvestigateResponse
-from backend.core.logging import configure_logging, log_event, redact
+from backend.core.logging import configure_logging, log_event
 from starlette.requests import Request
 from diagnostic_service.diagnostics import PodEvidenceError
 
@@ -123,9 +124,7 @@ class BackendTests(PrivateLogTests):
         self.assertTrue(all(entry["investigation_id"] == body["investigation_id"] for entry in operations))
         self.assertEqual(operations[-1]["duration_ms"], 125.0)
         self.assertEqual(operations[-1]["tools_used"], ["get_logs", "get_metrics"])
-        history = self.entries("messages")[0]
-        self.assertEqual(history["messages"], messages_to_dict(self.result["messages"]))
-        self.assertEqual(history["investigation_id"], body["investigation_id"])
+        self.assertFalse((self.log_directory / "messages.jsonl").exists())
 
     def test_no_tool_calls_are_inferred_from_answer(self):
         self.result = {"messages": [AIMessage(content="Used get_logs 42 times.")]}
@@ -133,7 +132,7 @@ class BackendTests(PrivateLogTests):
         self.assertEqual(body["metadata"]["tools_used"], [])
         self.assertEqual(body["metadata"]["tool_call_count"], 0)
 
-    def test_full_history_is_redacted_before_persistence_without_mutating_answer(self):
+    def test_prompt_and_answer_are_redacted_and_history_is_not_written(self):
         answer = "**Diagnosis**\npassword=answer-secret"
         self.result = {"messages": [
             HumanMessage(content="password=request-secret"),
@@ -144,14 +143,14 @@ class BackendTests(PrivateLogTests):
                         name="get_logs", tool_call_id="logs-1"),
             AIMessage(content=answer, usage_metadata={"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}),
         ]}
-        response = self.client.post("/agent/investigate", json={"message": "password=request-secret"})
-        self.assertEqual(response.json()["answer"], answer)
-        saved = (self.log_directory / "messages.jsonl").read_text()
+        response = self.client.post("/agent/investigate", json={"message": "Inspect demo password=request-secret"})
+        self.assertEqual(response.json()["answer"], "**Diagnosis**\npassword=[REDACTED]")
+        self.assertEqual(self.graph.astream.call_args.args[0]["messages"][0].content,
+                         "Inspect demo password=[REDACTED]")
+        saved = (self.log_directory / "operations.jsonl").read_text()
         for secret in ("request-secret", "argument-secret", "header-secret", "alice@example.com", "log-secret", "answer-secret"):
             self.assertNotIn(secret, saved)
-        history = self.entries("messages")[0]["messages"]
-        self.assertEqual(len(history), 4)
-        self.assertEqual(history[-1]["data"]["usage_metadata"]["total_tokens"], 15)
+        self.assertFalse((self.log_directory / "messages.jsonl").exists())
         self.assertEqual(self.result["messages"][-1].content, answer)
 
     def test_text_blocks_are_returned_as_answer_text(self):
@@ -166,7 +165,8 @@ class BackendTests(PrivateLogTests):
 
     def test_invalid_requests_do_not_invoke_graph(self):
         for body in ({}, {"message": ""}, {"message": " \n\t "}, {"message": None},
-                     {"message": 123}, {"message": True}, {"message": []}):
+                     {"message": 123}, {"message": True}, {"message": []},
+                     {"message": "password=test-credential"}, {"message": "é" * 5000}):
             with self.subTest(body=body):
                 response = self.client.post("/agent/investigate", json=body)
                 self.assertEqual(response.status_code, 422)
@@ -188,33 +188,32 @@ class BackendTests(PrivateLogTests):
         self.assertEqual(response.json()["status"], "failed")
         self.assertNotIn("private", response.text)
 
-    def test_failure_retains_partial_history_and_tool_metadata(self):
+    def test_failure_logs_tool_metadata_without_partial_history(self):
         self.result = {"messages": [
             HumanMessage(content="Inspect demo."),
             AIMessage(content="", tool_calls=[{"name": "get_logs", "args": {}, "id": "logs-1"}]),
             ToolMessage(content="partial evidence", name="get_logs", tool_call_id="logs-1"),
         ]}
-        for failure, code in ((RuntimeError("do-not-persist-this"), 500),
-                              (GraphRecursionError("do-not-persist-this"), 503)):
+        for failure, code, category in ((RuntimeError("do-not-persist-this"), 500, "investigation_failed"),
+                                        (GraphRecursionError("do-not-persist-this"), 503, "step_limit")):
             self.failure = failure
             response = self.client.post("/agent/investigate", json={"message": "Inspect demo."})
             self.assertEqual(response.status_code, code)
             body = response.json()
             InvestigateResponse.model_validate(body)
             self.assertEqual(body["metadata"]["tool_call_count"], 1)
-            history = self.entries("messages")[-1]
-            self.assertEqual(history["messages"][-1]["data"]["content"], "partial evidence")
+            self.assertFalse((self.log_directory / "messages.jsonl").exists())
             operations = self.entries("operations")[-3:]
             self.assertEqual([entry["event"] for entry in operations], [
                 "investigation_started", "investigation_error", "investigation_completed",
             ])
-            self.assertEqual(operations[1]["error_type"], type(failure).__name__)
-            self.assertTrue(operations[1]["frames"])
+            self.assertEqual(operations[1]["error_type"], category)
+            self.assertEqual(operations[1]["tool_call_count"], 1)
             self.assertEqual(operations[-1]["status"], "failed")
             self.assertTrue(all(entry["investigation_id"] == body["investigation_id"] for entry in operations))
         self.assertNotIn("do-not-persist-this", (self.log_directory / "operations.jsonl").read_text())
 
-    def test_failure_before_first_graph_state_still_logs_request(self):
+    def test_failure_before_first_graph_state_still_logs_metadata(self):
         async def fail(*args, **kwargs):
             raise RuntimeError("do-not-persist-this")
             yield
@@ -222,28 +221,30 @@ class BackendTests(PrivateLogTests):
         self.graph.astream.side_effect = fail
         response = self.client.post("/agent/investigate", json={"message": "Inspect demo."})
         self.assertEqual(response.status_code, 500)
-        self.assertEqual(self.entries("messages")[0]["messages"][0]["data"]["content"], "Inspect demo.")
+        self.assertEqual(self.entries("operations")[-2]["error_type"], "investigation_failed")
+        self.assertNotIn("Inspect demo.", (self.log_directory / "operations.jsonl").read_text())
 
     def test_cancellation_is_logged_and_propagates(self):
         self.failure = asyncio.CancelledError()
         with self.assertRaises(asyncio.CancelledError):
             asyncio.run(investigate(InvestigateRequest(message="Inspect demo."), Request({"type": "http", "app": app}), UserPublic.model_validate(self.admin)))
-        self.assertEqual(self.entries("operations")[-2]["error_type"], "CancelledError")
-        self.assertEqual(self.entries("messages")[0]["status"], "failed")
+        self.assertEqual(self.entries("operations")[-2]["error_type"], "cancelled")
+        self.assertEqual(self.entries("operations")[-1]["status"], "failed")
 
     def test_log_write_failure_does_not_change_response_or_leak_payload(self):
-        handler = app.state.messages_log.handlers[0]
-        self.result = {"messages": [AIMessage(content="password=do-not-leak")]}
+        handler = app.state.operations_log.handlers[0]
+        self.result = {"messages": [AIMessage(content="Diagnosis: password=do-not-leak")]}
         with patch.object(handler, "_open", side_effect=OSError("private disk details")), \
              patch("sys.stderr", new_callable=StringIO) as stderr:
             handler.stream.close()
             handler.stream = None
             response = self.client.post("/agent/investigate", json={"message": "Inspect demo."})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(stderr.getvalue())["event"], "investigation_log_write_failed")
+        self.assertTrue(stderr.getvalue())
+        self.assertTrue(all(json.loads(line)["event"] == "investigation_log_write_failed"
+                            for line in stderr.getvalue().splitlines()))
         self.assertNotIn("do-not-leak", stderr.getvalue())
         self.assertNotIn("private disk details", stderr.getvalue())
-        self.assertEqual(self.entries("operations")[-1]["status"], "completed")
 
     def test_endpoint_is_documented_as_post(self):
         schema = self.client.get("/openapi.json").json()
@@ -251,7 +252,7 @@ class BackendTests(PrivateLogTests):
         self.assertEqual(self.client.get("/agent/investigate").status_code, 405)
 
     def test_unified_app_serves_health_evidence_and_investigations(self):
-        report = {"pod": {"name": "demo", "namespace": "aiops"}, "collection_errors": []}
+        report = evidence_report()
         with patch("backend.evidence.routes.collect_pod_evidence", return_value=report) as collector:
             self.assertEqual(self.client.get("/health").json(), {"status": "ok"})
             collector.assert_not_called()
@@ -321,7 +322,7 @@ class BackendGraphTests(PrivateLogTests):
         self.assertIsInstance(messages[-1], ToolMessage)
         self.assertEqual(messages[-1].tool_call_id, "list-1")
 
-    def test_real_graph_failure_after_tool_execution_retains_evidence(self):
+    def test_real_graph_failure_after_tool_execution_logs_only_metadata(self):
         model = Mock()
         model.invoke.side_effect = [
             AIMessage(content="", tool_calls=[{
@@ -337,18 +338,16 @@ class BackendGraphTests(PrivateLogTests):
                 response = client.post("/agent/investigate", json={"message": "List Pods in namespace aiops."})
         self.assertEqual(response.status_code, 500)
         self.assertEqual(response.json()["metadata"]["tool_call_count"], 1)
-        history = self.entries("messages")[0]["messages"]
-        self.assertEqual([message["type"] for message in history], ["human", "ai", "tool"])
-        self.assertEqual(json.loads(history[-1]["data"]["content"])["evidence"]["pods"], [])
+        self.assertEqual(self.entries("operations")[-1]["tools_used"], ["list_pods"])
+        self.assertFalse((self.log_directory / "messages.jsonl").exists())
         self.assertNotIn("private model failure", (self.log_directory / "operations.jsonl").read_text())
 
 
 class LoggingTests(PrivateLogTests):
     def configure(self, **kwargs):
-        loggers = configure_logging(self.log_directory, **kwargs)
-        for logger in loggers:
-            self.addCleanup(self.close_logger, logger)
-        return loggers
+        logger = configure_logging(self.log_directory, **kwargs)
+        self.addCleanup(self.close_logger, logger)
+        return logger
 
     @staticmethod
     def close_logger(logger):
@@ -357,12 +356,11 @@ class LoggingTests(PrivateLogTests):
             handler.close()
 
     def test_rotation_permissions_and_bounded_storage(self):
-        operations, history = self.configure(max_bytes=1024, backup_count=2)
+        operations = self.configure(max_bytes=1024, backup_count=2)
         for index in range(30):
-            for logger in (operations, history):
-                log_event(logger, "test_event", investigation_id=str(index), payload="diagnostic " * 25)
+            log_event(operations, "test_event", investigation_id=str(index), payload="diagnostic " * 25)
         files = list(self.log_directory.iterdir())
-        self.assertEqual(len(files), 6)
+        self.assertEqual(len(files), 3)
         self.assertEqual(stat.S_IMODE(self.log_directory.stat().st_mode), 0o700)
         for path in files:
             self.assertLessEqual(path.stat().st_size, 1024)
@@ -371,57 +369,19 @@ class LoggingTests(PrivateLogTests):
                 json.loads(line)
         self.assertEqual(self.entries("operations")[-1]["investigation_id"], "29")
 
-    def test_oversized_history_is_reconstructable_and_files_remain_bounded(self):
-        _, history = self.configure(max_bytes=2048, backup_count=10)
-        answer = "## Diagnosis\n" + "Kubernetes \"failure\" ☁\\\n" * 100
-        log_event(history, "investigation_messages", investigation_id="example-id",
-                  messages=[{"type": "ai", "data": {"content": answer}}])
-        fragments = []
-        for path in self.log_directory.glob("messages.jsonl*"):
-            self.assertLessEqual(path.stat().st_size, 2048)
-            fragments.extend(json.loads(line) for line in path.read_text().splitlines())
-        self.assertTrue(all(item["event"] == "investigation_log_fragment" for item in fragments))
-        self.assertEqual(len(fragments), fragments[0]["parts"])
-        restored = json.loads("".join(item["json_fragment"] for item in sorted(fragments, key=lambda item: item["part"])))
-        self.assertEqual(restored["messages"][0]["data"]["content"], answer)
+    def test_unrecognized_fields_are_dropped(self):
+        operations = self.configure()
+        log_event(operations, "test_event", status="completed", messages=["raw message"], answer="raw answer")
+        self.assertEqual(self.entries("operations")[0]["status"], "completed")
+        self.assertNotIn("raw", (self.log_directory / "operations.jsonl").read_text())
 
     def test_reconfiguration_does_not_duplicate_handlers_or_events(self):
         self.configure()
-        operations, _ = self.configure()
+        operations = self.configure()
         self.assertEqual(len(operations.handlers), 1)
         log_event(operations, "single_event")
         self.assertEqual(len(self.entries("operations")), 1)
         self.assertFalse(operations.propagate)
-
-    def test_known_secrets_and_additional_literals_are_redacted(self):
-        with patch.dict(os.environ, {
-            "EXAMPLE_API_KEY": "opaque-environment-value",
-            "AIOPS_LOG_REDACT_VALUES": "private-project-name\nprivate-account-number",
-        }):
-            operations, _ = self.configure()
-        log_event(operations, "test_event", message="opaque-environment-value private-project-name private-account-number")
-        saved = (self.log_directory / "operations.jsonl").read_text()
-        for value in ("opaque-environment-value", "private-project-name", "private-account-number"):
-            self.assertNotIn(value, saved)
-
-    def test_redaction_handles_structured_and_free_text_secrets(self):
-        original = {
-            "nested": {"apiKey": "api-value", "credentials": {"value": "credential-value"}},
-            "environment": [{"name": "DB_PASSWORD", "value": "env-value"}],
-            "secret": {"kind": "Secret", "data": {"opaque": "base64-value"}},
-            "message": 'Authorization: Bearer bearer-value password="two word secret" '
-                       'https://db-user:db-pass@db.example.com/?token=query-secret '
-                       'alice@example.com 10.20.30.40 '
-                       '-----BEGIN PRIVATE KEY-----\nprivate-key-body\n-----END PRIVATE KEY-----',
-            "json_content": json.dumps({"password": "json-value"}),
-        }
-        output = json.dumps(redact(original))
-        for value in ("api-value", "credential-value", "env-value", "base64-value", "bearer-value",
-                      "two word secret", "db-user", "db-pass", "query-secret", "alice@example.com",
-                      "10.20.30.40", "private-key-body", "json-value"):
-            self.assertNotIn(value, output)
-        self.assertEqual(original["nested"]["apiKey"], "api-value")
-
 
 class BackendEnvironmentTests(PrivateLogTests):
     def test_root_env_is_loaded_before_building_graph(self):

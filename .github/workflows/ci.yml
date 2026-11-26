@@ -58,6 +58,9 @@ jobs:
       - name: Test agent and LangGraph workflow
         run: uv run --locked python -m unittest tests.test_agent_workflow -v
 
+      - name: Test evidence security and mocked provider transport
+        run: uv run --locked python -m unittest tests.test_evidence_security -v
+
       - name: Test package import boundaries
         run: uv run --locked python -m unittest tests.test_imports -v
 

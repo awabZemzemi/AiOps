@@ -2,6 +2,9 @@
 
 from langchain_core.messages import AIMessage, ToolMessage
 
+from agent.tools import get_tools
+
+REGISTERED_TOOLS = {tool.name for tool in get_tools()}
 
 def tool_metadata(messages) -> dict:
     """Count requested calls once, including calls whose execution failed.
@@ -20,6 +23,6 @@ def tool_metadata(messages) -> dict:
             names.append(message.name)
             call_ids.add(message.tool_call_id)
     return {
-        "tools_used": list(dict.fromkeys(name for name in names if name)),
+        "tools_used": list(dict.fromkeys(name for name in names if name in REGISTERED_TOOLS)),
         "tool_call_count": len(names),
     }

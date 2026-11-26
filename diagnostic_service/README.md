@@ -133,7 +133,7 @@ The report always contains these sections:
 - Status and event text fields are capped at 4,096 characters. Truncated text is evidence, not a diagnosis.
 - Environment values, volume source details, annotations, and Secret contents are omitted. `envFrom` references are not resolved, so names imported through them cannot be enumerated.
 - Probe HTTP header values and all exec command tokens are redacted, since they can embed credentials. Other probe configuration is retained.
-- Logs, events, termination messages, and probe URLs are application-controlled text and may themselves contain sensitive information. This collector does not guarantee arbitrary secret detection/redaction in that text. Treat reports as sensitive; avoid logging credentials in applications and review reports before sharing them.
+- Logs, events, termination messages, and probe URLs are application-controlled text. The Python collectors return projected evidence for local callers. The evidence CLI and API apply the shared direct-release policy, and the agent applies a narrower model-release policy. Treat all outputs as sensitive because pattern-based redaction covers recognized formats.
 
 ## Tests
 

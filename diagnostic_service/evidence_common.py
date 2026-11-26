@@ -8,15 +8,17 @@ class PodEvidenceError(RuntimeError):
         self.status = status
 
 
+COLLECTION_REASONS = {400: "Request unavailable", 401: "Authentication required",
+                      403: "Access forbidden", 404: "Resource unavailable",
+                      429: "API rate limit exceeded"}
+
+
 def collection_error(operation, error, container=None):
     status = getattr(error, "status", None)
     # Never copy raw API bodies, headers, or exception messages into evidence.
-    reasons = {400: "Request unavailable", 401: "Authentication required",
-               403: "Access forbidden", 404: "Resource unavailable",
-               429: "API rate limit exceeded"}
     entry = {"operation": operation, "status": status,
              "error_type": type(error).__name__,
-             "message": reasons.get(status, "Kubernetes request failed")}
+             "message": COLLECTION_REASONS.get(status, "Kubernetes request failed")}
     if container is not None:
         entry["container"] = container
     return entry

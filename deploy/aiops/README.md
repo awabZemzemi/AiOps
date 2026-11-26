@@ -198,10 +198,10 @@ RUN_K8S_INTEGRATION=0 uv run --locked python -m unittest discover -s tests/colle
 Local restricted credentials are a bearer secret: protect the file and renew it.
 Namespace-wide `get pods` necessarily permits Kubernetes Pod specifications,
 which can contain application-sensitive literals, even though the collectors
-allowlist exposed fields. Kubernetes RBAC does not redact log contents. External
-model evidence handling, application password policy and other existing review
-findings are unchanged by this task. An explicitly supplied privileged kubeconfig
-would still be privileged: use the generated file and verify its identity.
+allowlist exposed fields. The application applies a separate evidence policy before
+releasing content to the model or HTTP clients. Pattern-based redaction covers
+recognized formats. An explicitly supplied privileged kubeconfig grants the rights
+of that identity. Use the generated file and verify its identity.
 
 References: [TokenRequest workflow](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_create/kubectl_create_token/)
 and [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/).

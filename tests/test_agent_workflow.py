@@ -20,7 +20,6 @@ from agent.factory import create_model
 from agent.state import AgentState
 from agent.tools import get_tools
 from diagnostic_service.evidence_common import PodEvidenceError
-from diagnostic_service.models import MAX_TEXT_CHARS
 
 
 def tool_request(name, args, call_id="call-1"):
@@ -42,12 +41,12 @@ class AgentWorkflowTests(unittest.TestCase):
         self.evidence = {
             "get_pod_info": {"pod": {"name": "demo", "namespace": "aiops"},
                              "containers": [{"name": "app"}], "collection_errors": []},
-            "list_pods": {"namespace": "aiops", "pods": [{"name": "demo"}],
+            "list_pods": {"namespace": "aiops", "pods": [{"name": "demo", "namespace": "aiops"}],
                           "truncated": False, "collection_errors": []},
             "get_logs": {"logs": {"app": {"current": "", "previous": None}},
                          "collection_errors": []},
             "get_events": {"events": [], "collection_errors": []},
-            "get_metrics": {"metrics": {"timestamp": "now", "window": "30s", "containers": [
+            "get_metrics": {"metrics": {"timestamp": "2026-10-20T10:00:00Z", "window": "30s", "containers": [
                 {"name": "app", "cpu": "5m", "memory": "20Mi"},
             ]}, "collection_errors": []},
         }
@@ -142,7 +141,8 @@ class AgentWorkflowTests(unittest.TestCase):
     def test_recursion_limit_stops_repeated_tools_and_can_be_overridden(self):
         for limit in (None, 2, 4):
             with self.subTest(limit=limit), patch("agent.graph.create_model") as factory:
-                factory.return_value.invoke.side_effect = lambda state: tool_request("list_pods", self.args["list_pods"])
+                factory.return_value.invoke.side_effect = lambda state: tool_request(
+                    "list_pods", self.args["list_pods"], str(len(state["messages"])))
                 graph = create_graph()
                 config = {} if limit is None else {"recursion_limit": limit}
                 with self.assertRaises(GraphRecursionError):
@@ -193,7 +193,8 @@ class AgentWorkflowTests(unittest.TestCase):
                 message, observation = self.invoke_tool(name)
                 self.assertEqual(message.status, "success")
                 self.assertEqual(observation["evidence"], self.evidence[name])
-        errors = [{"operation": "logs.previous", "status": 400}]
+        errors = [{"operation": "logs.previous", "status": 400, "error_type": "ApiException",
+                   "message": "Request unavailable"}]
         self.evidence["get_logs"]["collection_errors"] = errors
         message, observation = self.invoke_tool("get_logs")
         self.assertEqual(message.status, "success")
@@ -201,7 +202,7 @@ class AgentWorkflowTests(unittest.TestCase):
         self.assertEqual(observation["evidence"]["logs"]["app"]["current"], "")
 
     def test_unavailable_metrics_and_truncated_listing(self):
-        self.evidence["get_metrics"].update(metrics=None, collection_errors=[{"status": 404}])
+        self.evidence["get_metrics"].update(metrics=None, collection_errors=[{"operation": "metrics", "status": 404}])
         message, observation = self.invoke_tool("get_metrics")
         self.assertEqual(message.status, "error")
         self.assertEqual(observation["status"], "collection_error")
@@ -211,15 +212,14 @@ class AgentWorkflowTests(unittest.TestCase):
         self.assertEqual(observation["status"], "partial")
 
     def test_metrics_observations_remain_bounded(self):
-        containers = [{"name": "app", "cpu": "x" * (MAX_TEXT_CHARS + 1), "memory": "1Mi"}] * 101
+        containers = [{"name": "app", "cpu": "5m", "memory": "1Mi"}] * 101
         self.evidence["get_metrics"]["metrics"]["containers"] = containers
         _, observation = self.invoke_tool("get_metrics")
         bounded = observation["evidence"]
         self.assertEqual(observation["status"], "partial")
         self.assertEqual(len(bounded["metrics"]["containers"]), 100)
-        self.assertEqual(len(bounded["metrics"]["containers"][0]["cpu"]), MAX_TEXT_CHARS)
+        self.assertEqual(bounded["metrics"]["containers"][0]["cpu"], "5m")
         self.assertEqual(len(containers), 101)
-        self.assertEqual(len(containers[0]["cpu"]), MAX_TEXT_CHARS + 1)
 
     def test_missing_tool_arguments_and_invalid_log_limit_do_not_collect(self):
         for name in self.args:
@@ -237,7 +237,7 @@ class AgentWorkflowTests(unittest.TestCase):
     def test_model_binds_all_tools_with_message_only_prompt(self):
         with patch.dict(os.environ, {"GROQ_API_KEY": "test-only-no-network"}):
             pipeline = create_model(tools=self.tools)
-        self.assertEqual(pipeline.first.input_variables, ["messages"])
+        self.assertEqual(pipeline.middle[0].input_variables, ["messages"])
         self.assertEqual({d["function"]["name"] for d in pipeline.last.kwargs["tools"]}, set(self.args))
 
     def test_model_configuration_errors_are_clear(self):

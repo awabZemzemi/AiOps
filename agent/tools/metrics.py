@@ -4,11 +4,8 @@ from langchain.tools import ToolRuntime, tool
 from agent.authorization import AuthorizationContext
 from langchain_core.messages import ToolMessage
 
-from ._common import COLLECTOR_ERRORS, collector_failure, evidence_message, require_tool_namespace
-from diagnostic_service.models import MAX_TEXT_CHARS, text
+from ._common import COLLECTOR_ERRORS, collector_failure, observation_message, require_tool_namespace
 from diagnostic_service.tools.resource_metrics import collect_resource_metrics
-
-MAX_METRIC_CONTAINERS = 100
 
 
 @tool
@@ -28,26 +25,4 @@ def get_metrics(namespace: str, pod_name: str, runtime: ToolRuntime[Authorizatio
     except COLLECTOR_ERRORS as error:
         return collector_failure(runtime, "get_metrics", namespace, error, pod_name=pod_name)
 
-    metrics = evidence["metrics"]
-    if metrics is not None:
-        # Bound the LLM-facing observation without altering the Sprint 2 collector.
-        containers = metrics["containers"]
-        bounded = {
-            "timestamp": text(metrics["timestamp"]), "window": text(metrics["window"]),
-            "containers": [{key: text(container.get(key)) for key in ("name", "cpu", "memory")}
-                           for container in containers[:MAX_METRIC_CONTAINERS]],
-        }
-        values = [metrics["timestamp"], metrics["window"]]
-        values.extend(container.get(key) for container in containers[:MAX_METRIC_CONTAINERS]
-                      for key in ("name", "cpu", "memory"))
-        truncated = len(containers) > MAX_METRIC_CONTAINERS or any(
-            isinstance(value, str) and len(value) > MAX_TEXT_CHARS for value in values
-        )
-        evidence = {**evidence, "metrics": bounded, "collection_errors": list(evidence["collection_errors"])}
-        if truncated:
-            evidence["collection_errors"].append({
-                "operation": "metrics", "status": None, "error_type": "CollectionLimit",
-                "message": f"Metrics observation limited to {MAX_METRIC_CONTAINERS} containers and {MAX_TEXT_CHARS} characters per field.",
-            })
-    return evidence_message(runtime, "get_metrics", namespace, pod_name, evidence,
-                            has_evidence=metrics is not None)
+    return observation_message(runtime, "get_metrics", namespace, {"evidence": evidence}, pod_name=pod_name)
