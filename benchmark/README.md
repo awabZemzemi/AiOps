@@ -1,5 +1,7 @@
 # AiOps Benchmark v1
 
+For the manual offline Giskard Checks evaluation, see the [security baseline](SECURITY_BASELINE.md).
+
 This is a manually operated Kubernetes diagnosis benchmark for the repository's
 existing FastAPI/LangGraph agent. It is independent of SentinelShop and never
 deploys or changes the existing Test Lab. The benchmark creates one incident
